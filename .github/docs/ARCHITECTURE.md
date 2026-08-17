@@ -19,12 +19,25 @@ Every version must produce a real, testable improvement.
 | Module | Responsibility |
 |---|---|
 | Identity | Persistent identity and personality |
-| Reasoning | Natural-language understanding and reasoning |
+| Mood Reader | User state detection (business / normal / low-tired) |
+| Tone Engine | Adaptive formal/informal response, warm + motivating when low |
+| Uncertainty / Guessing | Labeled guesses, honest about missing context |
+| Reasoning | Natural-language understanding and reasoning (hybrid brain) |
 | Context Manager | Conversation and task context |
-| Memory | Persistent memory |
+| Memory | Persistent memory — holds everything, sharp recall |
 | Planner | Basic planning |
-| Policy Engine | Policy enforcement |
+| Policy Engine | Policy enforcement, authority levels |
 | Logger | Event/action logging |
+
+## Hybrid Brain
+
+Mike uses BOTH a local brain and a global one.
+
+- Local first: private, free, fast.
+- Global when needed: harder questions, more capability.
+- Any knowledge retrieved from the global brain is persisted into
+  Mike's private memory, so future lookups come from his own brain
+  before going external again.
 
 ## Tool Architecture
 

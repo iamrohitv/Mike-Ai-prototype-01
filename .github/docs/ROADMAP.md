@@ -23,6 +23,16 @@ persistent identity, basic personality, context management, persistent
 memory, reasoning, basic planning, policy enforcement, structured
 responses, event/action logging.
 
+Deliverables specific to V0.1:
+
+- **Personality model** — mirror-of-Rohit behavior, mood reader
+  (business / normal / low-tired), tone engine (always warm and
+  motivating when low), honest guessing with labeled uncertainty
+- **Hybrid brain** — local brain by default, global brain when needed,
+  and knowledge from the global side cached into Mike's private memory
+- **Memory that holds everything** — every word, fact, task and
+  preference remembered; sharp context across days
+
 First milestone: run `mike`.
 
 Mike should:

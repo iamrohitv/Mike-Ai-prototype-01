@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mike"
+version = "0.1.0"
+description = "Mike - Rohit's proprietary personal AI counterpart"
+requires-python = ">=3.10"
+
+[project.scripts]
+mike = "interfaces.text.cli:main"
+
+[tool.setuptools]
+packages = [
+    "core",
+    "core.identity",
+    "core.mood",
+    "core.tone",
+    "core.context",
+    "core.reasoning",
+    "core.planning",
+    "memory",
+    "policies",
+    "tools",
+    "tools.computer",
+    "interfaces",
+    "interfaces.text",
+    "security",
+    "monitoring",
+    "events",
+]
