@@ -1,5 +1,11 @@
 import sys
 
+try:
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+except (AttributeError, ValueError):
+    pass
+
 from memory.store import MemoryStore
 from core.context.context import ConversationContext
 from core.reasoning.brain import Brain
