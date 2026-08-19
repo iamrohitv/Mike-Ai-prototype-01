@@ -26,6 +26,18 @@ class RemoteAuthTest(unittest.TestCase):
         self.assertTrue(server._authorized("Bearer abc123"))
         self.assertFalse(server._authorized("Bearer nope"))
 
+    def test_index_page_exists(self):
+        from interfaces.remote import server
+        self.assertIn("MIKE", server._INDEX_HTML)
+        self.assertIn("SpeechRecognition", server._INDEX_HTML)
+        self.assertIn("/api/chat", server._INDEX_HTML)
+
+    def test_lan_ip_returns_string(self):
+        from interfaces.remote.server import _lan_ip
+        ip = _lan_ip()
+        self.assertIsInstance(ip, str)
+        self.assertIn(".", ip)
+
 
 if __name__ == "__main__":
     unittest.main()

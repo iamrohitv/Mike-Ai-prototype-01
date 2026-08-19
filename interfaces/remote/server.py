@@ -12,6 +12,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from interfaces.text.cli import Mike
 
+_INDEX_HTML = (Path(__file__).parent / "static" / "index.html").read_text(
+    encoding="utf-8"
+)
+
 _mike = None
 _mike_lock = threading.RLock()
 _token = os.environ.get("MIKE_REMOTE_KEY", "")
@@ -45,6 +49,14 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_GET(self):
+        if self.path == "/" or self.path == "/index.html":
+            body = _INDEX_HTML.encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
         if self.path == "/api/health":
             self._send(200, {"status": "ok", "brain": bool(get_mike())})
             return
@@ -119,13 +131,38 @@ class Handler(BaseHTTPRequestHandler):
             message = payload.get("message", "")
             with _mike_lock:
                 mike = get_mike()
+                mike.events.emit("phone.command", {"message": message})
                 reply = mike.handle(message)
+                mike.events.emit("phone.reply", {"reply": reply})
             self._send(200, {"reply": reply})
         except Exception as exc:  # noqa: BLE001
             self._send(500, {"error": str(exc)})
 
     def log_message(self, fmt, *args):
         pass
+
+
+def _lan_ip():
+    try:
+        import socket
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
+    except Exception:  # noqa: BLE001
+        return "127.0.0.1"
+
+
+def serve_background(mike=None, port=8877):
+    global _mike
+    if _mike is None:
+        _mike = mike
+    server = ThreadingHTTPServer(("0.0.0.0", port), Handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    ip = _lan_ip()
+    return server, thread, f"http://{ip}:{port}"
 
 
 def main():

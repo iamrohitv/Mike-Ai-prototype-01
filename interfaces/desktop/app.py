@@ -69,6 +69,8 @@ class MikeDesktop(tk.Tk):
         self._tray_running = threading.Event()
         self._awareness = self._start_awareness()
         self._wire_tray_notifications()
+        self._remote_url = self._start_remote()
+        self._wire_phone_updates()
 
         self.rec_queue = queue.Queue()
         self.running = threading.Event()
@@ -148,6 +150,8 @@ class MikeDesktop(tk.Tk):
         self.text_send.configure(command=self._send_text)
 
         self._append_chat("state", "voice exchange ready")
+        if self._remote_url:
+            self._append_chat("state", f"phone: {self._remote_url}")
         self._update_chat_width()
 
     def _build_dock(self):
@@ -472,9 +476,10 @@ class MikeDesktop(tk.Tk):
         for i, hv in enumerate(heights):
             bh = max(2, hv * 22)
             x = bx + i * gap
+            a = min(1.0, 0.4 + 0.6 * hv)
             self.canvas.create_rectangle(
                 x, by - bh, x + bar_w, by,
-                fill=blend(BG, color, 0.4 + 0.6 * (hv / 1.0)),
+                fill=blend(BG, color, a),
                 outline="", tags="dynamic",
             )
 
@@ -496,6 +501,37 @@ class MikeDesktop(tk.Tk):
             self.canvas.itemconfigure(self.state_label, text=label)
         except (tk.TclError, AttributeError):
             pass
+
+    # ---------- remote ----------
+    def _wire_phone_updates(self):
+        def on_command(event):
+            if event.kind != "phone.command":
+                return
+            message = event.payload.get("message", "")
+            if message:
+                self.after(0, lambda: self._show_user(message))
+                self.after(0, lambda: self._set_state("thinking"))
+
+        def on_reply(event):
+            if event.kind != "phone.reply":
+                return
+            reply = event.payload.get("reply", "")
+            if reply:
+                self.after(0, lambda: self._show_mike(reply))
+                self.after(0, lambda: self._set_state("speaking"))
+
+        self.mike.events.subscribe(on_command)
+        self.mike.events.subscribe(on_reply)
+
+    def _start_remote(self):
+        try:
+            from interfaces.remote.server import serve_background
+            server, thread, url = serve_background(mike=self.mike)
+            self._remote_server = server
+            return url
+        except Exception:  # noqa: BLE001
+            self._remote_server = None
+            return None
 
     # ---------- awareness ----------
     def _start_awareness(self):
@@ -595,13 +631,25 @@ class MikeDesktop(tk.Tk):
         self.after(0, self.lift)
         self.after(0, self.focus_force)
 
+    def destroy(self):
+        self.running.clear()
+        if getattr(self, "_remote_server", None) is not None:
+            try:
+                self._remote_server.shutdown()
+            except Exception:  # noqa: BLE001
+                pass
+        try:
+            super().destroy()
+        except Exception:  # noqa: BLE001
+            pass
+
     def _quit(self, icon=None, item=None):
         self.running.clear()
         if self._awareness is not None:
             self._awareness.stop()
         if self._tray is not None:
             self._tray.stop()
-        self.after(0, self.destroy)
+        self.destroy()
 
     def _greeting(self):
         from datetime import datetime

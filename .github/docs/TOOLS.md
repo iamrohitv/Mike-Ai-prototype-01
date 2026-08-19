@@ -65,6 +65,25 @@ registry. If the brain is offline, a local keyword router
 (`_fallback_route`) matches the request against per-tool keyword sets
 so common commands still work without network access.
 
+## Phone Control (V0.5)
+
+The desktop app starts a token-authenticated remote HTTP server on port
+8877 in the background. On your phone (same WiFi):
+
+1. Open `http://<pc-ip>:8877` — the JARVIS-styled mobile page loads.
+2. Enter `MIKE_REMOTE_KEY` once (saved in the browser).
+3. Tap the mic and speak, or type a command (briefing / status / tasks /
+   compact chips included).
+4. Mike processes the command on the PC and replies as text + spoken voice.
+
+One-time setup (run PowerShell as admin):
+
+    python -m interfaces.remote.firewall enable
+
+Manage the rule later:
+
+    python -m interfaces.remote.firewall disable
+
 ## Development Tools (V0.2)
 
 Potential tools: filesystem, terminal, git, GitHub, browser, code

@@ -59,6 +59,8 @@ class Mike:
         self.guardian = GuardianEngine(self.events, self.memory)
 
         def on_monitor(event):
+            if not event.kind.startswith("monitor."):
+                return
             kind = event.kind.split(".", 1)[-1]
             self.initiative.evaluate(kind, event.payload)
             self.guardian.evaluate(kind, event.payload)
