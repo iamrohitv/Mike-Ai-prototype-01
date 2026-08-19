@@ -10,6 +10,7 @@ requires-python = ">=3.10"
 
 [project.scripts]
 mike = "interfaces.text.cli:main"
+mike-desktop = "interfaces.desktop.app:main"
 
 [tool.setuptools]
 packages = [
@@ -26,6 +27,7 @@ packages = [
     "tools.computer",
     "interfaces",
     "interfaces.text",
+    "interfaces.desktop",
     "security",
     "monitoring",
     "events",
