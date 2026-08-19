@@ -198,6 +198,27 @@ class MikeDesktop(tk.Tk):
         except (tk.TclError, AttributeError):
             pass
 
+    def _greeting(self):
+        from datetime import datetime
+        hour = datetime.now().hour
+        if hour < 12:
+            part = "morning"
+        elif hour < 17:
+            part = "afternoon"
+        else:
+            part = "evening"
+        recent = self.mike.memory.recent_memories(limit=3)
+        if recent:
+            last = recent[0]["content"].strip()
+            return (
+                f"Good {part}, Rohit. I'm Mike. "
+                f"Last time we spoke, you were on '{last}'. I'm listening."
+            )
+        return (
+            f"Good {part}, Rohit. I'm Mike, your personal counterpart. "
+            "I'm here and I'm listening."
+        )
+
     # ---------- voice ----------
     def _start_voice(self):
         self._set_state("listening")
@@ -225,8 +246,13 @@ class MikeDesktop(tk.Tk):
         recognizer.pause_threshold = 0.8
 
         with sr.Microphone() as source:
-            self.after(0, lambda: self._set_state("listening"))
             recognizer.adjust_for_ambient_noise(source, duration=1.0)
+            greeting = self._greeting()
+            self.after(0, lambda: self._append_chat("mike", greeting))
+            self.after(0, lambda: self._set_state("speaking"))
+            engine.say(greeting)
+            engine.runAndWait()
+            self.after(0, lambda: self._set_state("listening"))
             while self.running.is_set():
                 try:
                     audio = recognizer.listen(source, timeout=3, phrase_time_limit=30)
