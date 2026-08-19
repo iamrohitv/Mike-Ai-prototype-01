@@ -1,3 +1,4 @@
+import re
 import sys
 
 try:
@@ -9,12 +10,14 @@ except (AttributeError, ValueError):
 from memory.store import MemoryStore
 from core.context.context import ConversationContext
 from core.reasoning.brain import Brain
-from core.planning.planner import make_plan
+from core.planning.planner import format_plan, make_plan
 from policies.engine import PolicyEngine
 from tools.registry import build_tools
 from monitoring.logger import get_logger
 from security.paths import db_path
 from security.env import ensure_env_template
+from events.bus import EventBus
+from awareness.briefing import BriefingBuilder
 
 
 class Mike:
@@ -27,6 +30,47 @@ class Mike:
         self.context = ConversationContext(self.memory)
         self.brain = Brain(self.memory)
         self.pending_clear = None
+        self.events = EventBus()
+        self.briefings = BriefingBuilder(self.memory)
+        self.awareness = None
+        self.operations = None
+        self.perception = None
+
+    def load_perception(self):
+        from perception.sensors import PerceptionHub, ScreenSensor, SystemSensor
+        if self.perception is None:
+            self.perception = PerceptionHub(self.events, sensors=[SystemSensor(), ScreenSensor()])
+        return self.perception
+
+    def load_operations(self):
+        from operations.reports import ReportRunner
+        if self.operations is None:
+            self.operations = ReportRunner(self.memory, self.policies)
+        return self.operations
+
+    def enable_awareness(self, scheduler=None):
+        from awareness.initiative import InitiativeEngine
+        from awareness.scheduler import Scheduler
+        from guardian.engine import GuardianEngine
+        self.awareness = scheduler or Scheduler(self.events)
+        self.initiative = InitiativeEngine(
+            self.events, self.memory, self.policies, self.brain
+        )
+        self.guardian = GuardianEngine(self.events, self.memory)
+
+        def on_monitor(event):
+            kind = event.kind.split(".", 1)[-1]
+            self.initiative.evaluate(kind, event.payload)
+            self.guardian.evaluate(kind, event.payload)
+
+        self.events.subscribe(on_monitor)
+        try:
+            from awareness.monitors import HealthMonitor
+            self.awareness.add_monitor(HealthMonitor(self.events, self.guardian))
+        except Exception:  # noqa: BLE001
+            pass
+        self.awareness.start()
+        return self.awareness
 
     def briefing(self):
         recent_mem = self.memory.recent_memories(limit=4)
@@ -43,6 +87,34 @@ class Mike:
             for m in recent_mem:
                 parts.append(f"  - {m['content']}")
         return "\n".join(parts)
+
+    def _handle_approval(self, text):
+        lowered = text.strip().lower()
+        if lowered not in ("approve", "yes approve", "approve it", "deny", "no deny", "deny it", "cancel"):
+            return None
+        if not self.policies.pending_approvals:
+            return None
+        tool_name, payload = next(iter(self.policies.pending_approvals.items()))
+        tool = next((t for t in self.tools if t.name == tool_name), None)
+        if tool is None:
+            return "There is a pending action, but I can't find the tool for it."
+        if lowered.startswith("deny") or lowered == "cancel":
+            self.policies.deny(tool_name)
+            self.memory.log_action(
+                action=tool_name, reason="denied by Rohit", result="denied",
+                verification="denied",
+            )
+            self.logger.info("DENIED: %s by Rohit", tool_name)
+            return "Understood — I've cancelled that. Nothing was changed."
+        self.policies.approve(tool_name)
+        self.memory.log_action(
+            action=tool_name, reason="approved by Rohit", result="approved",
+            verification="approved",
+        )
+        self.logger.info("APPROVED: %s by Rohit", tool_name)
+        if hasattr(tool, "approve_pending"):
+            return tool.approve_pending(payload)
+        return "Approved. That action is now allowed."
 
     def handle_clear(self, text):
         active = self.memory.active_memories(limit=50)
@@ -100,9 +172,192 @@ class Mike:
         lines = [f"- {m['content']}" for m in archived]
         return "In the corner of my brain:\n" + "\n".join(lines)
 
+    @staticmethod
+    def _is_briefing_request(text):
+        lowered = (text or "").lower()
+        return any(
+            phrase in lowered
+            for phrase in [
+                "brief me",
+                "daily briefing",
+                "give me a briefing",
+                "what's the situation",
+                "whats the situation",
+                "what's the status",
+                "whats the status",
+                "what should i focus on",
+            ]
+        )
+
+    @staticmethod
+    def _is_operation_request(text):
+        lowered = (text or "").lower()
+        return any(
+            phrase in lowered
+            for phrase in [
+                "run the daily report",
+                "daily report",
+                "run project report",
+                "project report",
+                "run task triage",
+                "task triage",
+                "run the routine",
+                "routine operations",
+                "run operations",
+                "run reports",
+                "compact memory",
+                "compact my memory",
+                "run compact",
+            ]
+        )
+
+    def _handle_operation(self, text):
+        lowered = (text or "").lower()
+        name = None
+        if "daily report" in lowered:
+            name = "daily_report"
+        elif "project report" in lowered:
+            name = "project_report"
+        elif "task triage" in lowered:
+            name = "task_triage"
+        elif "compact" in lowered:
+            name = "compact"
+        runner = self.load_operations()
+        results = runner.run(name=name)
+        if not results:
+            return "I don't have a routine operation for that yet."
+        reply = "\n\n".join(results)
+        self.context.add_mike(reply)
+        return reply
+
+    @staticmethod
+    def _is_perception_request(text):
+        lowered = (text or "").lower()
+        return any(
+            phrase in lowered
+            for phrase in [
+                "what do you sense",
+                "what do you see",
+                "sensor readings",
+                "read your sensors",
+                "what are you aware of",
+                "check your senses",
+            ]
+        )
+
+    def _handle_perception(self):
+        hub = self.load_perception()
+        readings = hub.sense_all()
+        lines = ["Current senses:"]
+        for name, data in readings.items():
+            detail = ", ".join(f"{k}={v}" for k, v in data.items())
+            lines.append(f"- {name}: {detail}")
+        reply = "\n".join(lines)
+        self.context.add_mike(reply)
+        return reply
+
+    @staticmethod
+    def _is_reminder_request(text):
+        lowered = (text or "").lower()
+        return (
+            "remind me in" in lowered
+            or "remind me at" in lowered
+            or "set a reminder" in lowered
+            or lowered.startswith("list reminders")
+            or "upcoming reminders" in lowered
+        )
+
+    def _handle_reminder(self, text):
+        from datetime import datetime, timedelta, timezone
+        lowered = text.lower()
+        if lowered.startswith("list reminders") or "upcoming reminders" in lowered:
+            pending = self.memory.pending_reminders(limit=20)
+            if not pending:
+                return "No reminders are scheduled."
+            lines = ["Upcoming reminders:"]
+            for r in pending:
+                due = datetime.fromisoformat(r["due_ts"])
+                local = due.astimezone()
+                lines.append(f"- {r['title']} (due {local.strftime('%H:%M %d %b')})")
+            return "\n".join(lines)
+        minutes = 0
+        for token in lowered.split():
+            if token.isdigit():
+                minutes = int(token)
+                break
+        if "hour" in lowered:
+            minutes = minutes * 60
+        if "day" in lowered:
+            minutes = minutes * 1440
+        if not minutes:
+            minutes = 5
+        title = re.sub(r"(?i)^(remind me in \d+ (minute|hour|day)s? (to|that|about)|remind me at \S+ (to|that|about)|set a reminder (in )?\d+ (minute|hour|day)s? (to|that|about)|set a reminder to)\s*", "", text).strip()
+        if not title:
+            title = text
+        due = datetime.now(timezone.utc) + timedelta(minutes=minutes)
+        self.memory.add_reminder(title, due.isoformat())
+        self.memory.log_action(
+            action="reminder",
+            reason="user request",
+            result=f"in {minutes} minutes: {title}",
+            verification="scheduled",
+        )
+        return (
+            f"Done — I'll remind you about '{title}' in {minutes} minute"
+            + ("s" if minutes != 1 else "")
+            + "."
+        )
+
+    @staticmethod
+    def _is_help_request(text):
+        lowered = (text or "").lower()
+        return lowered in ("help", "help me", "what can you do", "what can you do?")
+
+    def _handle_help(self):
+        lines = [
+            "Here's what I can do:",
+            "  talk        - just talk to me, I remember everything",
+            "  brief me    - daily status from my memory and tasks",
+            "  reminders   - 'remind me in 10 minutes to <thing>'",
+            "  tasks       - add / list / complete tasks",
+            "  notes       - 'remember that <thing>'",
+            "  files       - 'read the file <path>'",
+            "  terminal    - 'run the command <cmd>' (mutating needs approval)",
+            "  git         - status, log, diff, commit, push (mutating needs approval)",
+            "  system      - OS, disk and machine status",
+            "  screenshot  - 'take a screenshot'",
+            "  project     - 'check the project'",
+            "  senses      - 'what do you sense'",
+            "  reports     - 'run the daily report' / 'run task triage'",
+            "  clear       - 'forget about <thing>' (safe, never deleted)",
+            "  recall      - 'what was I working on'",
+            "  voice       - desktop app listens and speaks, wake with 'hey mike'",
+        ]
+        return "\n".join(lines)
+
     def handle(self, text):
         self.context.add_user(text)
         self.logger.info("USER: %s", text)
+        self.memory.record_metric("messages", 1)
+
+        if self._is_help_request(text):
+            reply = self._handle_help()
+            self.context.add_mike(reply)
+            return reply
+
+        if self._is_briefing_request(text):
+            reply = self.briefings.build()
+            self.context.add_mike(reply)
+            return reply
+
+        if self._is_operation_request(text):
+            return self._handle_operation(text)
+
+        if self._is_perception_request(text):
+            return self._handle_perception()
+
+        if self._is_reminder_request(text):
+            return self._handle_reminder(text)
 
         if self.pending_clear and text.strip().lower() in ("confirm", "yes clear"):
             return self.confirm_clear()
@@ -112,6 +367,10 @@ class Mike:
 
         if self.context.is_peek_request(text):
             return self.peek_corner()
+
+        approval_reply = self._handle_approval(text)
+        if approval_reply is not None:
+            return approval_reply
 
         if self.context.is_recall_request(text):
             context_blob = self.context.recall_context()
@@ -136,7 +395,7 @@ class Mike:
             tool = matched_tool
             if self.policies.may_execute(tool.name):
                 plan = make_plan(text, self.tools)
-                self.logger.info("PLAN: %s", " -> ".join(plan))
+                self.logger.info("PLAN:\n%s", format_plan(plan))
                 result = tool.run(text)
                 verification = tool.verify(result)
                 self.memory.log_action(

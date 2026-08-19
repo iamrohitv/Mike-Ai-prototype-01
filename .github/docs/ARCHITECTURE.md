@@ -29,6 +29,30 @@ Every version must produce a real, testable improvement.
 | Policy Engine | Policy enforcement, authority levels |
 | Logger | Event/action logging |
 
+## V0.2+ Components
+
+| Module | Responsibility |
+|---|---|
+| Tools (computer/) | Terminal, git, filesystem, notes, tasks, system health, screenshot |
+| Awareness | Scheduler, monitors (disk/repo/server/tasks/routine/reminders/metrics/health), initiative engine |
+| Guardian | Normal / unusual / emergency classification, check-ins and escalation, scheduled health checks |
+| Operations | Autonomous routine reporting (daily report, project report, task triage, compact) |
+| Perception | Sensor hub for system/screen/camera readings (robotics body) |
+| Remote interface | Token-authenticated phone/remote API for status, briefing, chat, sync, history, tools |
+| Distributed sync | Device registry and memory/conversation push/pull across devices |
+| Memory | Sharp recall: TF-IDF-lite weighting, biword (phrase) matching, auto-tags, compaction |
+
+## Memory Recall
+
+`MemoryStore.recall` ranks active memories by:
+- TF-IDF-lite weighting — rare query words outrank common ones.
+- Biword (adjacent phrase) matches score +1.5 each.
+- Auto-extracted tags match score +2.0 each.
+
+Every `remember()` auto-extracts the top significant keywords as tags
+(`recall_by_tag`), and `compact` folds old conversation lines into a
+summary memory while pruning raw history (via `prune_conversations`).
+
 ## Hybrid Brain
 
 Mike uses BOTH a local brain and a global one.
@@ -78,23 +102,38 @@ mike/
 |   +-- reasoning/
 |   +-- planning/
 |   +-- identity/
-|   +-- decision/
+|   +-- mood/
+|   +-- tone/
+|   +-- context/
 |
 +-- memory/
+|   +-- store.py
+|   +-- sync.py
 |
 +-- policies/
 |
 +-- tools/
 |   +-- computer/
-|   +-- git/
-|   +-- github/
-|   +-- email/
-|   +-- calendar/
+|       +-- note / task / file / project / terminal / git / system
+|
++-- awareness/
+|   +-- scheduler.py
+|   +-- monitors.py
+|   +-- initiative.py
+|   +-- briefing.py
+|
++-- guardian/
+|
++-- operations/
+|   +-- reports.py
+|
++-- perception/
+|   +-- sensors.py
 |
 +-- interfaces/
 |   +-- text/
-|   +-- voice/
-|   +-- phone/
+|   +-- desktop/
+|   +-- remote/
 |
 +-- monitoring/
 |

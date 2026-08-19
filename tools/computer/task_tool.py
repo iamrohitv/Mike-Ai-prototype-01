@@ -1,3 +1,5 @@
+import re
+
 from tools.base import Tool
 from policies.engine import Level
 
@@ -64,11 +66,14 @@ class TaskTool(Tool):
             "create a task ",
             "remind me to ",
             "task: ",
+            "task:",
             "todo: ",
+            "todo:",
         ]:
             if lowered.startswith(prefix):
                 title = title[len(prefix):].strip()
                 break
+        title = re.sub(r"^add (a )?task\s*[:=]\s*", "", title, flags=re.IGNORECASE).strip()
         if title:
             self.memory.add_task(title)
             return f"Added task: {title}"

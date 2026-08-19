@@ -7,10 +7,14 @@ name = "mike"
 version = "0.1.0"
 description = "Mike - Rohit's proprietary personal AI counterpart"
 requires-python = ">=3.10"
+dependencies = [
+    "psutil>=5.9",
+]
 
 [project.scripts]
 mike = "interfaces.text.cli:main"
 mike-desktop = "interfaces.desktop.app:main"
+mike-remote = "interfaces.remote.server:main"
 
 [tool.setuptools]
 packages = [
@@ -23,11 +27,17 @@ packages = [
     "core.planning",
     "memory",
     "policies",
+    "awareness",
+    "guardian",
+    "operations",
+    "perception",
     "tools",
     "tools.computer",
     "interfaces",
     "interfaces.text",
     "interfaces.desktop",
+    "interfaces.remote",
+    "awareness",
     "security",
     "monitoring",
     "events",

@@ -53,6 +53,9 @@ development environment.
 
 Workflow: Understand -> Inspect -> Plan -> Execute -> Test -> Verify -> Report.
 
+Status: terminal + git + system + filesystem tools implemented with
+policy-gated approval flow.
+
 ## V0.3 — Awareness
 
 Mike becomes proactive: email, calendar, project, client portal, server
@@ -61,11 +64,17 @@ and repository monitoring, scheduled checks, background processing.
 Initiative engine evaluates relevance, importance, urgency and whether
 to act, notify, or wait for a briefing.
 
+Status: scheduler + disk/repo/task/routine monitors + initiative engine
+running in the desktop app background. Reminders, metrics and scheduled
+health checks (via Guardian) also run on the scheduler.
+
 ## V0.4 — Voice
 
 Natural spoken interaction: speech-to-text, text-to-speech, voice
 identity and personality. The voice is an interface to the same Mike
 Core; it does not contain the core intelligence.
+
+Status: desktop voice app with wake-word stripping and fillers filter.
 
 ## V0.5 — Phone / Remote Mike
 
@@ -73,11 +82,17 @@ Dedicated professional number, incoming/outgoing calls, voice commands,
 remote status queries, urgent notifications, client-call handling,
 meeting scheduling.
 
+Status: token-authenticated remote HTTP API (chat, status, briefing,
+sync, history, tools) for phone/remote use.
+
 ## V0.6 — Distributed Mike
 
 One persistent identity across PC, laptop, phone, EV, servers, and
 future devices. These are interfaces/bodies of ONE Mike, sharing
 identity, memory, policies, tasks, context and event state.
+
+Status: device registry + memory/conversation sync (push/pull) over the
+remote API.
 
 ## V0.7 — Autonomous Operations
 
@@ -89,6 +104,9 @@ briefings.
 
 Long-term target: Mike ~60%, Rohit ~40%.
 
+Status: routine operations (daily report, project report, task triage,
+compact) runnable on demand and via the awareness scheduler.
+
 ## V0.8 — Advanced Perception & Guardian
 
 Context awareness and a protective/monitoring layer: location awareness
@@ -98,6 +116,10 @@ emergency escalation, system/security monitoring.
 Guardian principle: Normal -> no action; Unusual -> check in;
 Strong evidence of emergency -> predefined emergency policy.
 
+Status: GuardianEngine classifying monitor events into normal / unusual
+/ emergency with check-ins and escalation; scheduled health monitoring
+(cpu / memory / disk / battery) feeds the guardian on a 15-minute loop.
+
 ## V0.9 — Physical / Robotics Mike
 
 Cameras, computer vision, sensors, robot arms, mobile platform,
@@ -105,6 +127,9 @@ navigation, manipulation, actuators, simulation, robotics middleware.
 
 The robot becomes another interface/body connected to the existing
 Mike architecture — the brain is not rebuilt for robotics.
+
+Status: perception sensor hub (system/screen/camera) — robotics body
+planned.
 
 ## V1.0 — The Full Mike System
 

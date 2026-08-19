@@ -123,12 +123,34 @@ class Brain:
         answer = self._ask_local(messages)
         if answer is None:
             answer = self._ask_global(messages)
-        if not answer:
-            return None
-        choice = answer.strip().lower()
+        if answer:
+            choice = answer.strip().lower()
+            for tool in tools:
+                if tool.name in choice:
+                    return tool
+        return self._fallback_route(user_input, tools)
+
+    def _fallback_route(self, user_input, tools):
+        lowered = (user_input or "").lower()
+        keywords = {
+            "terminal": ["command", "run", "terminal", "execute", "ls", "dir", "echo"],
+            "git": ["git", "commit", "push", "pull", "stage", "branch"],
+            "file": ["file", "read", "open", "path"],
+            "task": ["task", "todo", "pending", "remind"],
+            "note": ["remember", "note", "recall"],
+            "project": ["project", "repo", "status", "inspect"],
+            "system": ["system", "disk", "battery", "health", "storage", "free space", "machine"],
+            "screenshot": ["screenshot", "screen", "capture"],
+        }
+        best = None
+        best_score = 0
         for tool in tools:
-            if tool.name in choice:
-                return tool
+            hits = sum(1 for k in keywords.get(tool.name, []) if k in lowered)
+            if hits > best_score:
+                best_score = hits
+                best = tool
+        if best and best_score >= 2:
+            return best
         return None
 
     def target_memories(self, user_input, memories):

@@ -37,6 +37,34 @@ mean unlimited authority (`ACCESS != AUTHORITY`).
 
 See POLICIES.md for the authority model.
 
+## Implemented Tools (V0.2)
+
+| Tool | Level | What it does |
+|---|---|---|
+| `note` | GREEN | Remember facts from conversation |
+| `task` | GREEN | Add / list / complete tasks |
+| `file` | GREEN | Read a text file and preview it |
+| `project` | YELLOW | Inspect git status and branch |
+| `system` | GREEN | Report OS, disk, host info |
+| `terminal` | YELLOW* | Run commands; read-only auto, risky require approval |
+| `git` | YELLOW* | Status, log, diff, pull, commit, push (mutating requires approval) |
+| `screenshot` | GREEN | Capture the screen to `config/screenshots/` |
+
+`*` Mutating operations (commit, push, delete, install, shutdown) are
+classified ORANGE and require Rohit to say "approve" (or "deny").
+
+Approval flow:
+1. Mike asks "Say 'approve' to allow it, or 'deny' to cancel."
+2. Rohit says `approve` or `deny`.
+3. Mike executes and verifies, or cancels, logging the decision.
+
+## Tool Routing
+
+`Brain.select_tool` asks the brain to pick the best tool from the
+registry. If the brain is offline, a local keyword router
+(`_fallback_route`) matches the request against per-tool keyword sets
+so common commands still work without network access.
+
 ## Development Tools (V0.2)
 
 Potential tools: filesystem, terminal, git, GitHub, browser, code

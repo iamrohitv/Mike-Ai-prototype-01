@@ -2,6 +2,10 @@ from tools.computer.note_tool import NoteTool
 from tools.computer.project_tool import ProjectTool
 from tools.computer.file_tool import FileTool
 from tools.computer.task_tool import TaskTool
+from tools.computer.terminal_tool import TerminalTool
+from tools.computer.git_tool import GitTool
+from tools.computer.system_tool import SystemTool
+from tools.computer.screenshot_tool import ScreenshotTool
 
 
 def build_tools(memory, policies):
@@ -10,4 +14,8 @@ def build_tools(memory, policies):
         ProjectTool(memory, policies),
         FileTool(memory, policies),
         TaskTool(memory, policies),
+        TerminalTool(memory, policies),
+        GitTool(memory, policies),
+        SystemTool(memory, policies),
+        ScreenshotTool(memory, policies),
     ]

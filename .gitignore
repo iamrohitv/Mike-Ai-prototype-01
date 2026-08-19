@@ -5,3 +5,4 @@ config/.env
 logs/
 .venv/
 venv/
+config/screenshots/
