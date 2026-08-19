@@ -56,3 +56,10 @@ class ProjectTool(Tool):
         else:
             result += "\nWorking tree is clean."
         return result
+
+    def verify(self, result):
+        if "Could not" in result:
+            return "failed"
+        if "On branch" in result:
+            return "verified: git commands succeeded"
+        return "completed"

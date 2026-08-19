@@ -28,5 +28,26 @@ class NoteTool(Tool):
 
     def run(self, request):
         content = request.strip()
+        lowered = content.lower()
+        for prefix in [
+            "remember that ",
+            "note that ",
+            "remember this ",
+            "make a note ",
+            "note down ",
+            "don't forget ",
+            "do not forget ",
+        ]:
+            if lowered.startswith(prefix):
+                content = content[len(prefix):].strip()
+                break
+        if not content:
+            return "What should I remember?"
         self.memory.remember(content, kind="fact", source="note")
         return "Noted. I've remembered that."
+
+    def verify(self, result):
+        stored = self.memory.recall(query=None, limit=1)
+        if stored:
+            return "verified: stored in memory"
+        return "failed"

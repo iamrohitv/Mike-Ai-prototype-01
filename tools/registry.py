@@ -1,6 +1,7 @@
 from tools.computer.note_tool import NoteTool
 from tools.computer.project_tool import ProjectTool
 from tools.computer.file_tool import FileTool
+from tools.computer.task_tool import TaskTool
 
 
 def build_tools(memory, policies):
@@ -8,4 +9,5 @@ def build_tools(memory, policies):
         NoteTool(memory, policies),
         ProjectTool(memory, policies),
         FileTool(memory, policies),
+        TaskTool(memory, policies),
     ]

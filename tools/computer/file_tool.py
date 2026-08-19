@@ -34,3 +34,10 @@ class FileTool(Tool):
             return f"Could not read {path}."
         preview = content[:1500]
         return f"{path} ({len(content)} chars):\n{preview}"
+
+    def verify(self, result):
+        if "Couldn't find" in result or "Could not" in result or "Which file" in result:
+            return "failed"
+        if result.endswith("chars):"):
+            return "verified: file read succeeded"
+        return "completed"

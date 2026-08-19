@@ -12,3 +12,6 @@ class Tool:
 
     def run(self, request):
         raise NotImplementedError
+
+    def verify(self, result):
+        return "completed"

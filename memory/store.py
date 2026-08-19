@@ -1,7 +1,22 @@
-import json
+import re
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
+
+STOPWORDS = {
+    "a", "about", "am", "an", "and", "are", "as", "at", "be", "by",
+    "can", "could", "did", "do", "does", "for", "from", "get", "have",
+    "how", "i", "in", "is", "it", "its", "me", "my", "of", "on", "or",
+    "our", "out", "please", "so", "tell", "that", "the", "this", "to",
+    "us", "was", "we", "what", "when", "where", "which", "who", "why",
+    "will", "with", "you", "your", "want", "like", "help", "know",
+    "need", "see", "look", "check", "show", "remind", "remember",
+    "make", "made", "any", "some", "just", "then", "there",
+}
+
+
+def _words(text):
+    return set(re.findall(r"[a-z0-9]+", (text or "").lower())) - STOPWORDS
 
 
 class MemoryStore:
@@ -27,6 +42,7 @@ class MemoryStore:
                 content TEXT NOT NULL,
                 kind TEXT NOT NULL DEFAULT 'fact',
                 source TEXT NOT NULL DEFAULT 'conversation',
+                status TEXT NOT NULL DEFAULT 'active',
                 ts TEXT NOT NULL
             );
 
@@ -56,6 +72,18 @@ class MemoryStore:
             """
         )
         self.conn.commit()
+        self._migrate()
+
+    def _migrate(self):
+        columns = [
+            row["name"]
+            for row in self.conn.execute("PRAGMA table_info(memory)").fetchall()
+        ]
+        if "status" not in columns:
+            self.conn.execute(
+                "ALTER TABLE memory ADD COLUMN status TEXT NOT NULL DEFAULT 'active'"
+            )
+            self.conn.commit()
 
     def _now(self):
         return datetime.now(timezone.utc).isoformat()
@@ -82,19 +110,85 @@ class MemoryStore:
         self.conn.commit()
 
     def recall(self, query=None, limit=10):
-        if query:
-            like = f"%{query}%"
-            rows = self.conn.execute(
-                "SELECT content, kind, source, ts FROM memory "
-                "WHERE content LIKE ? ORDER BY id DESC LIMIT ?",
-                (like, limit),
-            ).fetchall()
-        else:
-            rows = self.conn.execute(
-                "SELECT content, kind, source, ts FROM memory "
-                "ORDER BY id DESC LIMIT ?",
-                (limit,),
-            ).fetchall()
+        rows = self.conn.execute(
+            "SELECT content, kind, source, ts FROM memory "
+            "WHERE status = 'active' ORDER BY id DESC"
+        ).fetchall()
+        records = [dict(r) for r in rows]
+
+        if not query or not _words(query):
+            return records[:limit]
+
+        qwords = _words(query)
+        scored = []
+        for record in records:
+            mwords = _words(record["content"])
+            if not mwords:
+                continue
+            overlap = len(qwords & mwords)
+            if overlap == 0:
+                continue
+            ratio = overlap / len(mwords)
+            score = overlap + ratio
+            scored.append((score, record))
+        scored.sort(key=lambda x: x[0], reverse=True)
+        matches = [record for _, record in scored][:limit]
+        if matches:
+            return matches
+        return records[:limit]
+
+    def recent_memories(self, limit=5):
+        rows = self.conn.execute(
+            "SELECT content, kind, source, ts FROM memory "
+            "WHERE status = 'active' ORDER BY id DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    def active_memories(self, limit=50):
+        rows = self.conn.execute(
+            "SELECT id, content, kind, source, ts FROM memory "
+            "WHERE status = 'active' ORDER BY id DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    def archive_memories(self, ids):
+        if not ids:
+            return 0
+        placeholders = ",".join("?" for _ in ids)
+        cursor = self.conn.execute(
+            f"UPDATE memory SET status = 'archived' WHERE id IN ({placeholders})",
+            list(ids),
+        )
+        self.conn.commit()
+        return cursor.rowcount
+
+    def restore_memories(self, ids):
+        if not ids:
+            return 0
+        placeholders = ",".join("?" for _ in ids)
+        cursor = self.conn.execute(
+            f"UPDATE memory SET status = 'active' WHERE id IN ({placeholders})",
+            list(ids),
+        )
+        self.conn.commit()
+        return cursor.rowcount
+
+    def archived_memories(self, limit=50):
+        rows = self.conn.execute(
+            "SELECT id, content, kind, source, ts FROM memory "
+            "WHERE status = 'archived' ORDER BY id DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    def recent_pending_tasks(self, limit=5):
+        rows = self.conn.execute(
+            "SELECT id, title, status, ts FROM tasks "
+            "WHERE status = 'pending' ORDER BY id DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
         return [dict(r) for r in rows]
 
     def add_task(self, title):

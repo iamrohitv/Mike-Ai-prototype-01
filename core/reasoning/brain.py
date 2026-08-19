@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import urllib.error
 import urllib.request
 
@@ -103,3 +104,63 @@ class Brain:
                 "running or a global key is configured."
             )
         return f"{answer}\n\n(brain: {source})"
+
+    def select_tool(self, user_input, tools):
+        catalog = "\n".join(
+            f"- {tool.name}: {tool.description}" for tool in tools
+        )
+        prompt = (
+            "You are a tool router for a personal AI assistant. "
+            "Decide which single tool best fits the user's request.\n"
+            f"Available tools:\n{catalog}\n\n"
+            "Reply with ONLY the tool name if one fits, otherwise reply with the "
+            "single word: none."
+        )
+        messages = [
+            {"role": "system", "content": prompt},
+            {"role": "user", "content": user_input},
+        ]
+        answer = self._ask_local(messages)
+        if answer is None:
+            answer = self._ask_global(messages)
+        if not answer:
+            return None
+        choice = answer.strip().lower()
+        for tool in tools:
+            if tool.name in choice:
+                return tool
+        return None
+
+    def target_memories(self, user_input, memories):
+        if not memories:
+            return []
+        catalog = "\n".join(
+            f"ID {m['id']}: {m['content']}" for m in memories
+        )
+        prompt = (
+            "Rohit wants to forget/clear some memories. Here are his current "
+            "active memories, each with an ID.\n"
+            f"{catalog}\n\n"
+            "Decide which memories he is referring to. Reply with ONLY the "
+            "IDs, comma-separated. If he is clearing everything or being "
+            "vague about clearing memory, reply with ALL the IDs. If nothing "
+            "clearly matches, reply with the single word: none."
+        )
+        messages = [
+            {"role": "system", "content": prompt},
+            {"role": "user", "content": user_input},
+        ]
+        answer = self._ask_local(messages)
+        if answer is None:
+            answer = self._ask_global(messages)
+        if not answer:
+            return []
+        ids = []
+        for token in re.findall(r"\d+", answer):
+            try:
+                parsed = int(token)
+            except ValueError:
+                continue
+            if any(m["id"] == parsed for m in memories):
+                ids.append(parsed)
+        return list(dict.fromkeys(ids))
