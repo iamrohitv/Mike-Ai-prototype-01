@@ -28,7 +28,7 @@ def clean(text):
 
 
 class MikeDesktop(tk.Tk):
-    def __init__(self):
+    def __init__(self, hidden=False):
         super().__init__()
         self.title("MIKE")
         self.geometry("1100x700")
@@ -38,6 +38,8 @@ class MikeDesktop(tk.Tk):
         self.mike = Mike()
         self.state_label_text = tk.StringVar(value="initializing...")
         self._state = "idle"
+        self._tray = None
+        self._tray_running = threading.Event()
 
         self.rec_queue = queue.Queue()
         self.running = threading.Event()
@@ -46,6 +48,10 @@ class MikeDesktop(tk.Tk):
         self._build_layout()
         self._bind_resize()
         self._start_anim()
+        self._start_tray()
+        self.protocol("WM_DELETE_WINDOW", self._hide_to_tray)
+        if hidden:
+            self.withdraw()
         self.after(600, self._start_voice)
 
     # ---------- layout ----------
@@ -198,6 +204,42 @@ class MikeDesktop(tk.Tk):
         except (tk.TclError, AttributeError):
             pass
 
+    # ---------- tray ----------
+    def _start_tray(self):
+        try:
+            import pystray
+            from PIL import Image, ImageDraw
+        except ImportError:
+            return
+        image = Image.new("RGB", (64, 64), BG)
+        draw = ImageDraw.Draw(image)
+        draw.ellipse((8, 8, 56, 56), outline=CYAN, width=4)
+        draw.ellipse((20, 20, 44, 44), fill=CYAN)
+        menu = pystray.Menu(
+            pystray.MenuItem("Open Mike", self._show_from_tray, default=True),
+            pystray.MenuItem("Quit", self._quit),
+        )
+        self._tray = pystray.Icon("mike", image, "MIKE", menu)
+        self._tray_running.set()
+        threading.Thread(target=self._tray.run, daemon=True).start()
+
+    def _hide_to_tray(self):
+        if self._tray is not None:
+            self.withdraw()
+        else:
+            self.destroy()
+
+    def _show_from_tray(self, icon=None, item=None):
+        self.after(0, self.deiconify)
+        self.after(0, self.lift)
+        self.after(0, self.focus_force)
+
+    def _quit(self, icon=None, item=None):
+        self.running.clear()
+        if self._tray is not None:
+            self._tray.stop()
+        self.after(0, self.destroy)
+
     def _greeting(self):
         from datetime import datetime
         hour = datetime.now().hour
@@ -296,7 +338,8 @@ def _blend(c1, c2, alpha):
 
 
 def main():
-    app = MikeDesktop()
+    hidden = "--hidden" in sys.argv
+    app = MikeDesktop(hidden=hidden)
     app.mainloop()
 
 
