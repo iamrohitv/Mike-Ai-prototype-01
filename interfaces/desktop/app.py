@@ -75,6 +75,10 @@ class MikeDesktop(tk.Tk):
         self.rec_queue = queue.Queue()
         self.running = threading.Event()
         self.running.set()
+        self._tts_queue = queue.Queue()
+        self._tts_idle = threading.Event()
+        self._tts_idle.set()
+        threading.Thread(target=self._tts_worker, daemon=True).start()
 
         self._build_layout()
         self._bind_resize()
@@ -585,13 +589,43 @@ class MikeDesktop(tk.Tk):
 
     def _speak_async(self, text):
         try:
-            import pyttsx3
-            engine = pyttsx3.init()
-            engine.say(text)
-            engine.runAndWait()
-            self.after(0, lambda: self._set_state("listening"))
+            self._tts_queue.put(text)
         except Exception:  # noqa: BLE001
             pass
+
+    def _speak_and_wait(self, text):
+        self._tts_idle.clear()
+        self._tts_queue.put(text)
+        self._tts_idle.wait()
+
+    def _tts_worker(self):
+        try:
+            import pyttsx3
+            import time
+            engine = pyttsx3.init()
+            engine.startLoop(False)
+            voices = engine.getProperty("voices")
+            for v in voices:
+                if "zira" in v.id.lower() or "hazel" in v.id.lower():
+                    engine.setProperty("voice", v.id)
+                    break
+            rate = engine.getProperty("rate")
+            engine.setProperty("rate", rate - 20)
+            while True:
+                text = self._tts_queue.get()
+                if text is None:
+                    break
+                try:
+                    engine.say(text)
+                    while engine.isBusy():
+                        engine.iterate()
+                        time.sleep(0.01)
+                except Exception:  # noqa: BLE001
+                    pass
+                finally:
+                    self._tts_idle.set()
+        except Exception:  # noqa: BLE001
+            self._tts_idle.set()
 
     def _wire_tray_notifications(self):
         def on_event(event):
@@ -692,19 +726,6 @@ class MikeDesktop(tk.Tk):
 
     def _voice_loop(self):
         import speech_recognition as sr
-        import pyttsx3
-
-        engine = pyttsx3.init()
-        voices = engine.getProperty("voices")
-        preferred = None
-        for v in voices:
-            if "zira" in v.id.lower() or "hazel" in v.id.lower():
-                preferred = v
-                break
-        if preferred:
-            engine.setProperty("voice", preferred.id)
-        rate = engine.getProperty("rate")
-        engine.setProperty("rate", rate - 20)
 
         recognizer = sr.Recognizer()
         recognizer.energy_threshold = 300
@@ -716,8 +737,7 @@ class MikeDesktop(tk.Tk):
             greeting = self._greeting()
             self.after(0, lambda: self._append_chat("mike", greeting))
             self.after(0, lambda: self._set_state("speaking"))
-            engine.say(greeting)
-            engine.runAndWait()
+            self._speak_and_wait(greeting)
             self.after(0, lambda: self._set_state("listening"))
             while self.running.is_set():
                 try:
@@ -748,8 +768,7 @@ class MikeDesktop(tk.Tk):
                 except Exception as exc:  # noqa: BLE001
                     reply = f"I hit an issue while thinking: {exc}"
                 self.after(0, lambda r=reply: self._show_mike(r))
-                engine.say(clean(reply))
-                engine.runAndWait()
+                self._speak_and_wait(clean(reply))
                 self.after(0, lambda: self._set_state("listening"))
 
 
