@@ -84,6 +84,28 @@ Manage the rule later:
 
     python -m interfaces.remote.firewall disable
 
+### Remote from anywhere (V0.6 — Tailscale)
+
+The same phone page works from any city using [Tailscale](https://tailscale.com)
+(free) — a private WireGuard mesh between your PC and phone. Your PC is never
+exposed to the public internet.
+
+1. PC: install `winget install Tailscale.Tailscale`, open it, sign in with your
+   Google/Microsoft/GitHub account. It auto-runs as a Windows service.
+2. Phone: install the Tailscale app from the Play Store / App Store, sign in
+   with the SAME account, toggle it ON.
+3. Open `http://<pc-name>.ts.net:8877` (the stable tailnet address) on the
+   phone from any network — same login page, same `MIKE_REMOTE_KEY`.
+
+When Mike's desktop app starts it prints both URLs in the chat panel:
+
+- `phone (wifi): http://<lan-ip>:8877` — home network
+- `phone (anywhere): http://<pc-name>.ts.net:8877` — from anywhere
+
+Ask Mike `remote link` anytime to see the current URLs. The PC must be on and
+awake for either link to work. No firewall rule is needed for Tailscale (it
+makes an outbound connection).
+
 ## Development Tools (V0.2)
 
 Potential tools: filesystem, terminal, git, GitHub, browser, code

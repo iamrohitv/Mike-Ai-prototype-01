@@ -192,6 +192,45 @@ class Mike:
         )
 
     @staticmethod
+    def _is_remote_link_request(text):
+        lowered = (text or "").lower()
+        return any(
+            phrase in lowered
+            for phrase in [
+                "remote link",
+                "phone link",
+                "where can i reach you",
+                "access from anywhere",
+                "tailscale",
+            ]
+        )
+
+    def _handle_remote_link(self):
+        lines = []
+        try:
+            from interfaces.remote.tailnet import tailnet_url
+            url = tailnet_url(port=8877)
+        except Exception:  # noqa: BLE001
+            url = None
+        if url:
+            lines.append(
+                f"From anywhere in the world, open {url} on your phone "
+                "(Tailscale connected)."
+            )
+        else:
+            lines.append(
+                "Remote-from-anywhere is off. Install Tailscale on this PC and "
+                "your phone, sign into both, then ask me again."
+            )
+        try:
+            from interfaces.remote.server import _lan_ip
+            ip = _lan_ip()
+            lines.append(f"On your home wifi, open http://{ip}:8877.")
+        except Exception:  # noqa: BLE001
+            pass
+        return "\n".join(lines)
+
+    @staticmethod
     def _is_operation_request(text):
         lowered = (text or "").lower()
         return any(
@@ -333,6 +372,7 @@ class Mike:
             "  reports     - 'run the daily report' / 'run task triage'",
             "  clear       - 'forget about <thing>' (safe, never deleted)",
             "  recall      - 'what was I working on'",
+            "  remote      - 'remote link' shows phone access URLs",
             "  voice       - desktop app listens and speaks, wake with 'hey mike'",
         ]
         return "\n".join(lines)
@@ -349,6 +389,11 @@ class Mike:
 
         if self._is_briefing_request(text):
             reply = self.briefings.build()
+            self.context.add_mike(reply)
+            return reply
+
+        if self._is_remote_link_request(text):
+            reply = self._handle_remote_link()
             self.context.add_mike(reply)
             return reply
 

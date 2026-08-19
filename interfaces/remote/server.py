@@ -4,6 +4,7 @@ import json
 import os
 import sys
 import threading
+import time
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -19,6 +20,34 @@ _INDEX_HTML = (Path(__file__).parent / "static" / "index.html").read_text(
 _mike = None
 _mike_lock = threading.RLock()
 _token = os.environ.get("MIKE_REMOTE_KEY", "")
+
+_MAX_FAILED = 5
+_LOCKOUT_SECONDS = 60
+_failed_attempts = {}
+_failed_lock = threading.Lock()
+
+
+def _lockout_state(ip):
+    with _failed_lock:
+        entry = _failed_attempts.get(ip, (0, 0))
+        now = time.time()
+        count, window_start = entry
+        if now - window_start >= _LOCKOUT_SECONDS:
+            entry = (0, now)
+            _failed_attempts[ip] = entry
+            count = 0
+        if count >= _MAX_FAILED:
+            return _LOCKOUT_SECONDS - int(now - window_start)
+        return 0
+
+
+def _record_failed(ip):
+    with _failed_lock:
+        now = time.time()
+        count, window_start = _failed_attempts.get(ip, (0, 0))
+        if now - window_start >= _LOCKOUT_SECONDS:
+            count, window_start = 0, now
+        _failed_attempts[ip] = (count + 1, window_start)
 
 
 def get_mike():
@@ -40,6 +69,15 @@ def _authorized(auth_header):
 
 
 class Handler(BaseHTTPRequestHandler):
+    def _client_ip(self):
+        return self.client_address[0] if self.client_address else "unknown"
+
+    def _record_auth_failure(self):
+        _record_failed(self._client_ip())
+
+    def _is_locked_out(self):
+        return _lockout_state(self._client_ip()) > 0
+
     def _send(self, status, payload):
         body = json.dumps(payload).encode("utf-8")
         self.send_response(status)
@@ -49,6 +87,9 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_GET(self):
+        if self._is_locked_out():
+            self._send(429, {"error": "too many failed attempts, try again later"})
+            return
         if self.path == "/" or self.path == "/index.html":
             body = _INDEX_HTML.encode("utf-8")
             self.send_response(200)
@@ -61,6 +102,7 @@ class Handler(BaseHTTPRequestHandler):
             self._send(200, {"status": "ok", "brain": bool(get_mike())})
             return
         if not _authorized(self.headers.get("Authorization")):
+            self._record_auth_failure()
             self._send(401, {"error": "unauthorized"})
             return
         if self.path == "/api/status":
@@ -106,7 +148,11 @@ class Handler(BaseHTTPRequestHandler):
         self._send(404, {"error": "not found"})
 
     def do_POST(self):
+        if self._is_locked_out():
+            self._send(429, {"error": "too many failed attempts, try again later"})
+            return
         if not _authorized(self.headers.get("Authorization")):
+            self._record_auth_failure()
             self._send(401, {"error": "unauthorized"})
             return
         if self.path == "/api/sync/push":

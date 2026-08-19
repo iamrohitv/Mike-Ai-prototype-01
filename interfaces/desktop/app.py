@@ -151,7 +151,13 @@ class MikeDesktop(tk.Tk):
 
         self._append_chat("state", "voice exchange ready")
         if self._remote_url:
-            self._append_chat("state", f"phone: {self._remote_url}")
+            self._append_chat("state", f"phone (wifi): {self._remote_url}")
+            if getattr(self, "_tailnet_url", None):
+                self._append_chat(
+                    "state", f"phone (anywhere): {self._tailnet_url}")
+            else:
+                self._append_chat(
+                    "state", "phone (anywhere): install Tailscale on PC + phone")
         self._update_chat_width()
 
     def _build_dock(self):
@@ -528,9 +534,16 @@ class MikeDesktop(tk.Tk):
             from interfaces.remote.server import serve_background
             server, thread, url = serve_background(mike=self.mike)
             self._remote_server = server
+            self._tailnet_url = None
+            try:
+                from interfaces.remote.tailnet import tailnet_url
+                self._tailnet_url = tailnet_url(port=8877)
+            except Exception:  # noqa: BLE001
+                self._tailnet_url = None
             return url
         except Exception:  # noqa: BLE001
             self._remote_server = None
+            self._tailnet_url = None
             return None
 
     # ---------- awareness ----------
