@@ -367,6 +367,7 @@ class Mike:
             "  git         - status, log, diff, commit, push (mutating needs approval)",
             "  system      - OS, disk and machine status",
             "  screenshot  - 'take a screenshot'",
+            "  apps        - 'open notepad', 'launch calculator', 'start chrome'",
             "  project     - 'check the project'",
             "  senses      - 'what do you sense'",
             "  reports     - 'run the daily report' / 'run task triage'",
