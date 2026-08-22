@@ -370,6 +370,7 @@ class Mike:
             "  apps        - 'open notepad', 'launch calculator', 'start chrome'",
             "  launch      - 'open <file> in vscode', 'open https://... in chrome', 'open folder <path>'",
             "  whatsapp    - 'send message to <contact> saying <msg>', 'whatsapp <contact> <msg>'",
+            "  opencode    - 'opencode <task>' sends coding task to opencode",
             "  project     - 'check the project'",
             "  senses      - 'what do you sense'",
             "  reports     - 'run the daily report' / 'run task triage'",

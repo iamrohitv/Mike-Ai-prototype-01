@@ -10,6 +10,7 @@ from tools.computer.system_tool import SystemTool
 from tools.computer.screenshot_tool import ScreenshotTool
 from tools.computer.open_app_tool import OpenAppTool
 from tools.computer.whatsapp_tool import WhatsAppTool
+from tools.computer.opencode_bridge_tool import OpencodeBridgeTool
 
 
 def build_tools(memory, policies):
@@ -26,4 +27,5 @@ def build_tools(memory, policies):
         ScreenshotTool(memory, policies),
         OpenAppTool(memory, policies),
         WhatsAppTool(memory, policies),
+        OpencodeBridgeTool(memory, policies),
     ]
