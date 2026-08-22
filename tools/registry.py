@@ -15,8 +15,8 @@ def build_tools(memory, policies):
     return [
         NoteTool(memory, policies),
         ProjectTool(memory, policies),
-        FileTool(memory, policies),
         FileOpsTool(memory, policies),
+        FileTool(memory, policies),
         LaunchTool(memory, policies),
         TaskTool(memory, policies),
         TerminalTool(memory, policies),

@@ -22,6 +22,28 @@ LAUNCH_APPS = {
 
 BROWSERS = {"chrome", "firefox", "edge", "browser"}
 
+COMMON_SITES = {
+    "youtube": "https://youtube.com",
+    "google": "https://google.com",
+    "github": "https://github.com",
+    "stackoverflow": "https://stackoverflow.com",
+    "reddit": "https://reddit.com",
+    "twitter": "https://twitter.com",
+    "x": "https://x.com",
+    "facebook": "https://facebook.com",
+    "instagram": "https://instagram.com",
+    "linkedin": "https://linkedin.com",
+    "gmail": "https://gmail.com",
+    "outlook": "https://outlook.com",
+    "drive": "https://drive.google.com",
+    "docs": "https://docs.google.com",
+    "sheets": "https://sheets.google.com",
+    "netflix": "https://netflix.com",
+    "spotify": "https://spotify.com",
+    "amazon": "https://amazon.com",
+    "wikipedia": "https://wikipedia.org",
+}
+
 
 class LaunchTool(Tool):
     name = "launch"
@@ -79,48 +101,71 @@ class LaunchTool(Tool):
         return f"I don't know how to open '{target}'. Try a file path, folder, URL, or known app."
 
     def _is_url(self, text):
+        # Don't treat file paths with extensions as URLs
+        if os.path.exists(text):
+            return False
         return text.startswith(("http://", "https://", "www.")) or (
             "." in text and " " not in text and not os.path.exists(text)
-        )
+        ) or text.lower() in COMMON_SITES
 
     def _handle_open_with(self, target):
         parts = target.split(" in ", 1)
         file_or_url = parts[0].strip()
         app_name = parts[1].strip().lower()
 
+        resolved_path = self._resolve_file_path(file_or_url)
+        if os.path.isfile(resolved_path):
+            return self._open_file_with_app(resolved_path, app_name)
+        if os.path.isdir(resolved_path):
+            return self._open_folder_in_explorer(resolved_path)
+        # Fallback to URL handling
         if self._is_url(file_or_url):
             return self._open_url_in_browser(file_or_url, app_name)
-        if os.path.isfile(file_or_url):
-            return self._open_file_with_app(file_or_url, app_name)
-        if os.path.isdir(file_or_url):
-            return self._open_folder_in_explorer(file_or_url)
         return f"Could not find '{file_or_url}' to open with {app_name}."
 
     def _open_url(self, url):
-        if not url.startswith(("http://", "https://")):
+        url = url.strip()
+        if url.lower() in COMMON_SITES:
+            url = COMMON_SITES[url.lower()]
+        elif not url.startswith(("http://", "https://")):
             url = "https://" + url
-        browser = self._resolve_browser("browser")
-        return self._launch_url(url, browser)
+        return self._launch_url(url)
 
     def _open_url_in_browser(self, url, browser_name):
-        if not url.startswith(("http://", "https://")):
+        url = url.strip()
+        if url.lower() in COMMON_SITES:
+            url = COMMON_SITES[url.lower()]
+        elif not url.startswith(("http://", "https://")):
             url = "https://" + url
-        browser = self._resolve_browser(browser_name)
-        return self._launch_url(url, browser)
+        return self._launch_url(url)
 
     def _resolve_browser(self, name):
         if name in BROWSERS:
             return LAUNCH_APPS.get(name, "msedge.exe")
         return LAUNCH_APPS.get(name, "msedge.exe")
 
-    def _launch_url(self, url, browser_exe):
+    def _launch_url(self, url):
         try:
             subprocess.Popen(["start", "", url], shell=True)
-            return f"Opening {url} in default browser..."
+            return f"Opening {url}..."
         except Exception as exc:
             return f"Failed to open URL: {exc}"
 
+    def _resolve_file_path(self, file_path):
+        if os.path.isabs(file_path) and os.path.isfile(file_path):
+            return file_path
+        if os.path.isfile(file_path):
+            return os.path.abspath(file_path)
+        # check common locations
+        home = os.path.expanduser("~")
+        for base in (os.path.join(home, "OneDrive", "Desktop"), os.path.join(home, "Desktop"), os.path.join(home, "Documents"), os.path.join(home, "Downloads")):
+            full = os.path.join(base, file_path)
+            if os.path.isfile(full):
+                return full
+        return file_path
+
     def _open_file_with_app(self, file_path, app_name):
+        file_path = self._resolve_file_path(file_path)
         app_exe = LAUNCH_APPS.get(app_name)
         if not app_exe:
             return f"I don't know the app '{app_name}'. Try vscode, notepad, chrome, etc."
