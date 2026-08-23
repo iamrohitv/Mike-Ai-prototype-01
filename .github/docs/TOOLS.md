@@ -106,6 +106,12 @@ Ask Mike `remote link` anytime to see the current URLs. The PC must be on and
 awake for either link to work. No firewall rule is needed for Tailscale (it
 makes an outbound connection).
 
+### Autostart & manual start
+
+Everything that auto-starts with Mike (phone server, opencode bridge,
+autostart registry key, Tailscale) plus standalone manual commands is
+documented in [AUTOSTART.md](AUTOSTART.md).
+
 ## Development Tools (V0.2)
 
 Potential tools: filesystem, terminal, git, GitHub, browser, code
