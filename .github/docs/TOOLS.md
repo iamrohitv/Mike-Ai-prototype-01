@@ -112,6 +112,36 @@ Everything that auto-starts with Mike (phone server, opencode bridge,
 autostart registry key, Tailscale) plus standalone manual commands is
 documented in [AUTOSTART.md](AUTOSTART.md).
 
+## WhatsApp Messaging
+
+Send messages from your own WhatsApp account via WhatsApp Web (pywhatkit).
+
+Setup (once):
+1. Log into `web.whatsapp.com` in your default browser (scan QR, stay signed in).
+2. Give Mike your contacts — either:
+   - **Google Contacts export** (recommended): go to contacts.google.com ->
+     Export -> Google CSV or vCard -> save the `.vcf` as
+     `config/contacts.vcf`. Mike parses names + numbers automatically
+     (prefers mobile numbers), or
+   - **Manual file**: create `config/contacts.json`:
+     `{ "mom": "+919876543210", "rahul": "+919812345678" }`
+
+Usage:
+
+    send message to rahul saying on my way          # verbatim - sends exactly
+    whatsapp mom calling you in five minutes        # verbatim
+    whatsapp rahul wishing him happy birthday       # Mike composes the message
+    tell dad through whatsapp apologizing for delay # composed by the brain
+    send msg to +919812345678 saying hi             # raw number works too
+
+Name matching is fuzzy: first name ("rahul"), full name ("rahul sharma"),
+or exact key all resolve. Re-export the vcf anytime to refresh.
+
+When you give intent instead of exact words, Mike drafts the message with
+his brain and replies showing what he sent: `Sent to rahul (+91...):
+"Happy birthday! ..."`. Use "saying ..." whenever you want word-for-word.
+Messages fire immediately on your command - no confirmation step.
+
 ## Development Tools (V0.2)
 
 Potential tools: filesystem, terminal, git, GitHub, browser, code
