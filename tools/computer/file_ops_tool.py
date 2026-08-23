@@ -4,6 +4,9 @@ import shutil
 
 from policies.engine import Level
 from tools.base import Tool
+from tools.computer.locations import (
+    _desktop_path, extract_location, looks_like_location_answer,
+)
 
 
 class FileOpsTool(Tool):
@@ -67,8 +70,11 @@ class FileOpsTool(Tool):
     def __init__(self, memory, policies):
         super().__init__(memory, policies)
         policies.allow(self.name, self.level)
+        self._pending_op = None
 
     def matches(self, request):
+        if self._pending_op is not None:
+            return True
         lowered = request.lower()
         for pattern in (self.CREATE_PATTERNS + self.READ_PATTERNS + self.WRITE_PATTERNS + 
                        self.APPEND_PATTERNS + self.REPLACE_PATTERNS +
@@ -119,8 +125,25 @@ class FileOpsTool(Tool):
                 return "delete_folder"
         return None
 
+    TYPE_EXT = {
+        "python": "py", "py": "py", "markdown": "md", "md": "md",
+        "json": "json", "csv": "csv", "html": "html", "htm": "htm",
+        "javascript": "js", "js": "js", "java": "java",
+        "powershell": "ps1", "ps1": "ps1", "batch": "bat", "bat": "bat",
+        "yaml": "yml", "yml": "yml", "xml": "xml", "sql": "sql",
+    }
+
     def _extract_parameters(self, text: str, operation: str) -> dict:
         lowered = text.lower()
+
+        # 'python file', 'markdown file' etc. -> extension, not filename
+        forced_ext = None
+        type_match = re.search(
+            r"\b(" + "|".join(self.TYPE_EXT) + r")\b"
+            r"(?=\s+(?:file|files)\b)", lowered,
+        )
+        if type_match:
+            forced_ext = self.TYPE_EXT[type_match.group(1)]
 
         # Detect desktop reference anywhere
         on_desktop = any(re.search(p, lowered) for p in [
@@ -202,19 +225,28 @@ class FileOpsTool(Tool):
                                           "read", "txt", "text", "folder", "directory", "a", "an", "the",
                                           "with", "content", "containing", "saying", "called", "named", "as",
                                           "to", "into", "on", "at", "in"}
-                          
+                            if forced_ext:
+                                skip_words.update(self.TYPE_EXT)
+
                             tokens = path_text.strip().split()
                             path_tokens = [t for t in tokens if t not in skip_words]
                             if path_tokens:
                                 path = " ".join(path_tokens[-4:])  # last 4 meaningful words
 
+        # 'file of calculator app' -> drop connector prefixes from the name
+        path = re.sub(r"^(?:of|for|about)\s+", "", path.strip(), flags=re.I).strip()
+
         # Build final path
         if on_desktop:
             path = os.path.join(self._get_desktop_path(), path.strip())
 
-        # Add .txt if no extension and looks like a file
-        if path and not os.path.splitext(path)[1] and operation in ("create", "write", "append", "replace"):
-            path += ".txt"
+        # Extension: spoken type wins, else default to .txt
+        ext = os.path.splitext(path)[1].lower()
+        if path and operation in ("create", "write", "append", "replace"):
+            if forced_ext and ext != "." + forced_ext:
+                path = os.path.splitext(path)[0] + "." + forced_ext
+            elif not ext:
+                path += ".txt"
 
         # Extract old/new for replace operations
         old = ""
@@ -234,6 +266,13 @@ class FileOpsTool(Tool):
         }
 
     def run(self, request: str) -> str:
+        # resume a pending op when the user answers with just a location
+        if self._pending_op is not None:
+            if looks_like_location_answer(request):
+                return self._resume_pending(request)
+            # different instruction given - drop the stale pending
+            self._pending_op = None
+
         operation = self._classify_operation(request)
         if not operation:
             return "I didn't understand that file operation."
@@ -243,6 +282,45 @@ class FileOpsTool(Tool):
         if not path:
             return f"What would you like me to {operation}?"
 
+        # ask for a destination when creating/writing without one
+        if operation in ("create", "write") and not self._has_location(request, path):
+            self._pending_op = {"operation": operation, "params": params}
+            name = os.path.basename(path)
+            return (
+                f"Where should I {operation} '{name}'? Say 'on desktop', "
+                "'in documents', 'in downloads', an <X> drive, or a full path."
+            )
+
+        return self._finalize(operation, path, params, request)
+
+    def _has_location(self, request, path):
+        if re.search(r"[\\/]", path) or re.match(r"^[a-z]:", path, re.I):
+            return True
+        if extract_location(request.lower()):
+            return True
+        return False
+
+    def _resume_pending(self, request):
+        pend = self._pending_op
+        self._pending_op = None
+        loc = extract_location(request.lower())
+        if loc:
+            label, base = loc
+            if label.lower().startswith("desktop"):
+                base = self._get_desktop_path()
+        elif re.match(r"^[a-z]:\\", request.strip(), re.I):
+            base = request.strip().strip('"')
+        else:
+            base = self._get_desktop_path()
+        params = pend["params"]
+        old_path = params.get("path", "")
+        params["path"] = os.path.join(base, os.path.basename(old_path))
+        return self._finalize(
+            pend["operation"], params["path"], params,
+            f"{pend['operation']} {params['path']}",
+        )
+
+    def _finalize(self, operation, path, params, raw_request):
         level_map = {
             "create": Level.YELLOW,
             "read": Level.GREEN,
@@ -262,7 +340,7 @@ class FileOpsTool(Tool):
             })
             return f"{operation.capitalize()} {path} needs approval. Say 'approve' to proceed."
 
-        params["raw"] = request
+        params["raw"] = raw_request
         return self._execute_operation(operation, path, params)
 
     def _execute_operation(self, operation: str, path: str, params: dict) -> str:
