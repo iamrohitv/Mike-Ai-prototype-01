@@ -16,11 +16,12 @@ python -m unittest discover -s tests    # test suite
 
 | Area | Examples |
 |---|---|
-| **Voice + chat** | "hey mike" wake word, text box, phone page |
-| **Files** | `create a python file of calculator app on desktop`, read/write/append/replace/delete |
+| **Voice + chat** | "hey mike" wake word, text box, phone page; replies mirror your language (Hinglish in -> Hinglish out) |
+| **Files** | `create a python file of calculator app on desktop` -> `calculator app.py`; read/write/append/replace/delete; asks for a destination when you don't give one |
 | **Launch** | `open main.py in vscode`, `browse to github.com`, `launch notepad` |
-| **WhatsApp** | `send message to rohit saying hi`, or intent: `whatsapp rahul wishing him happy birthday` → brain drafts it |
-| **Email** | `email rahul about project update saying here's the file` (Gmail app password) |
+| **Contacts** | `save number 9876543210 as mom`, `add email a@b.com as boss`, `show contacts` |
+| **WhatsApp** | `send message to rohit saying hi`, or intent: `whatsapp rahul wishing him happy birthday` -> brain drafts it — in any language (`in hinglish`, `in hindi`) |
+| **Email** | `email rahul about update saying done`, or composed: `draft an email apologizing...` (Gmail app password) |
 | **Coding agent** | `opencode create a rest api` — routed to opencode CLI via local bridge |
 | **Memory** | recalls past context, archives to "the corner", daily briefings |
 | **Awareness** | disk/battery/task monitors, reminders, initiative engine, guardian |
