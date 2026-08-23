@@ -143,6 +143,17 @@ Phone: install the app, sign into the **same account**, toggle ON.
 
 ---
 
+## 5. Config Files Mike Reads at Runtime
+
+| File | Purpose |
+|---|---|
+| `config/.env` | Secrets: brain keys, `MIKE_REMOTE_KEY`, `MIKE_EMAIL_ADDRESS`, `MIKE_EMAIL_APP_PASSWORD`, dry-run flags |
+| `config/contacts.json` / `contacts.vcf` | Personal contacts for WhatsApp/email (gitignored) |
+
+Both reload on every message — edit anytime, no restart needed.
+
+---
+
 ## Troubleshooting
 
 | Symptom | Fix |
@@ -154,3 +165,4 @@ Phone: install the app, sign into the **same account**, toggle ON.
 | Port already in use | A bridge/server is already running — that's fine, it reuses it |
 | Nothing responds at all | PC asleep — wake it; Mike must be running (check tray icon) |
 | Wrong Desktop folder used | Mike auto-detects `OneDrive\Desktop` first, falls back to `Desktop` |
+| Emails land in spam | Mark them "Not spam" once in the receiver inbox; composed mails sign as Rohit (no placeholders) |
