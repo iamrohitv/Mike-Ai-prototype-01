@@ -1,5 +1,6 @@
 from tools.computer.opencode_bridge_tool import OpencodeBridgeTool
 from tools.computer.calculator_tool import CalculatorTool
+from tools.computer.email_tool import EmailTool
 from tools.computer.note_tool import NoteTool
 from tools.computer.project_tool import ProjectTool
 from tools.computer.file_ops_tool import FileOpsTool
@@ -12,8 +13,6 @@ from tools.computer.system_tool import SystemTool
 from tools.computer.screenshot_tool import ScreenshotTool
 from tools.computer.open_app_tool import OpenAppTool
 from tools.computer.whatsapp_tool import WhatsAppTool
-from tools.computer.opencode_bridge_tool import OpencodeBridgeTool
-from tools.computer.calculator_tool import CalculatorTool
 
 
 def build_tools(memory, policies):
@@ -30,6 +29,7 @@ def build_tools(memory, policies):
         SystemTool(memory, policies),
         ScreenshotTool(memory, policies),
         OpenAppTool(memory, policies),
+        EmailTool(memory, policies),
         WhatsAppTool(memory, policies),
         CalculatorTool(memory, policies),
     ]
