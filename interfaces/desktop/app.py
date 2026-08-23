@@ -142,8 +142,10 @@ class MikeDesktop(tk.Tk):
             highlightcolor=CYAN,
         )
         self.text_input.pack(fill="x", padx=8, pady=(6, 4))
-        self.text_input.insert(0, "type here or speak...")
-        self.text_input.bind("<FocusIn>", lambda e: self.text_input.delete(0, "end"))
+        self._input_placeholder = "type here or speak..."
+        self.text_input.insert(0, self._input_placeholder)
+        self.text_input.bind("<FocusIn>", self._input_focus_in)
+        self.text_input.bind("<FocusOut>", self._input_focus_out)
         self.text_input.bind("<Return>", lambda e: self._send_text())
 
         self.text_send = tk.Button(
@@ -276,9 +278,19 @@ class MikeDesktop(tk.Tk):
     def _show_user(self, text):
         self._append_chat("user", text)
 
+    def _input_focus_in(self, _event=None):
+        if self.text_input.get() == self._input_placeholder:
+            self.text_input.delete(0, "end")
+            self.text_input.configure(fg=TEXT)
+
+    def _input_focus_out(self, _event=None):
+        if not self.text_input.get():
+            self.text_input.insert(0, self._input_placeholder)
+            self.text_input.configure(fg="#4a5570")
+
     def _send_text(self):
         text = self.text_input.get().strip()
-        if not text:
+        if not text or text == self._input_placeholder:
             return
         self.text_input.delete(0, "end")
         self._show_user(text)
@@ -535,6 +547,11 @@ class MikeDesktop(tk.Tk):
             if reply:
                 self.after(0, lambda: self._show_mike(reply))
                 self.after(0, lambda: self._set_state("speaking"))
+                # phone replies aren't spoken locally - reset the orb
+                def reset():
+                    if self._state == "speaking":
+                        self._set_state("listening")
+                self.after(2500, reset)
 
         self.mike.events.subscribe(on_command)
         self.mike.events.subscribe(on_reply)
@@ -606,9 +623,25 @@ class MikeDesktop(tk.Tk):
 
     def _speak_async(self, text):
         try:
+            self._tts_idle.clear()  # before enqueue, or the waiter fires early
             self._tts_queue.put(text)
+            self._reset_speaking_when_done()
         except Exception:  # noqa: BLE001
             pass
+
+    def _reset_speaking_when_done(self):
+        """After the TTS queue drains, drop back to LISTENING (bug: orb
+        used to stay on SPEAKING forever for text/dock/phone replies)."""
+        def waiter():
+            self._tts_idle.wait()
+            def reset():
+                if self._state == "speaking":
+                    self._set_state("listening")
+            try:
+                self.after(0, reset)
+            except Exception:  # noqa: BLE001
+                pass
+        threading.Thread(target=waiter, daemon=True).start()
 
     def _speak_and_wait(self, text):
         self._tts_idle.clear()
