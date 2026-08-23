@@ -37,21 +37,30 @@ mean unlimited authority (`ACCESS != AUTHORITY`).
 
 See POLICIES.md for the authority model.
 
-## Implemented Tools (V0.2)
+## Implemented Tools
 
 | Tool | Level | What it does |
 |---|---|---|
 | `note` | GREEN | Remember facts from conversation |
 | `task` | GREEN | Add / list / complete tasks |
 | `file` | GREEN | Read a text file and preview it |
+| `file_ops` | YELLOW* | Create / read / write / append / replace / delete files & folders (natural language) |
+| `launch` | GREEN | Open a file in an app, URL in browser, folder in Explorer |
+| `open_app` | GREEN | Launch installed apps by name (notepad, vscode, chrome...) |
+| `contacts` | YELLOW | Save numbers/emails under names; list contacts |
+| `whatsapp` | YELLOW* | Send WhatsApp messages via WhatsApp Web (verbatim or brain-drafted) |
+| `email` | YELLOW* | Send Gmail via app password (verbatim or brain-composed subject+body) |
+| `calculator` | GREEN | Safe AST arithmetic ("what is 12 * (8 + 4) / 3") |
 | `project` | YELLOW | Inspect git status and branch |
 | `system` | GREEN | Report OS, disk, host info |
 | `terminal` | YELLOW* | Run commands; read-only auto, risky require approval |
 | `git` | YELLOW* | Status, log, diff, pull, commit, push (mutating requires approval) |
 | `screenshot` | GREEN | Capture the screen to `config/screenshots/` |
+| `opencode` | YELLOW | Route coding tasks to the opencode CLI via local bridge (:8765) |
 
-`*` Mutating operations (commit, push, delete, install, shutdown) are
-classified ORANGE and require Rohit to say "approve" (or "deny").
+`*` Mutating operations (write, delete, send, commit, push, install,
+shutdown) escalate to ORANGE and require Rohit to say "approve"
+(or "deny"). GREEN runs automatically; YELLOW runs and logs.
 
 Approval flow:
 1. Mike asks "Say 'approve' to allow it, or 'deny' to cancel."
@@ -141,6 +150,111 @@ When you give intent instead of exact words, Mike drafts the message with
 his brain and replies showing what he sent: `Sent to rahul (+91...):
 "Happy birthday! ..."`. Use "saying ..." whenever you want word-for-word.
 Messages fire immediately on your command - no confirmation step.
+
+## File Operations
+
+Natural-language file management (OneDrive Desktop auto-detected first).
+
+    create file notes.txt                          -> Mike ASKS where
+    desktop                                        -> completes on Desktop
+    create a python file of calculator app on desktop  -> calculator app.py
+    make a markdown file named ideas on desktop         -> ideas.md
+    write hello to notes.txt on desktop            # overwrite (approval)
+    append another line to notes.txt on desktop
+    replace old with new in notes.txt on desktop   # approval
+    delete file junk.txt / delete folder tmp       # approval
+
+- Spoken types become extensions: python/py, markdown/md, json, csv, html,
+  js, java, sql, yaml, bat, ps1 — never part of the filename.
+- No location given for create/write? Mike asks; answer with `desktop`,
+  `documents`, `downloads`, an `<X> drive`, or a full path.
+
+## App & Web Launcher
+
+    open main.py in vscode        # any file in any known app
+    browse to github.com          # default browser
+    open https://x.com in chrome
+    open folder C:\Projects
+    launch notepad                # or: open notepad / start spotify
+
+Known apps: notepad, calc, paint, cmd, powershell, explorer, settings,
+task manager, chrome, firefox, edge, vscode, discord, spotify, steam,
+outlook, teams, zoom, slack, whatsapp, telegram. Files resolve from cwd,
+Desktop, Documents and Downloads automatically.
+
+## Contacts Manager
+
+    save number 9876543210 as mom        # +91 assumed for bare numbers
+    save contact boss boss@corp.com
+    add email officialvermarohit14@gmail.com as rohit
+    append number 9999888877 as rahul    # same as save/add
+    show contacts
+
+Saved instantly to `config/contacts.json` (gitignored) and usable by
+WhatsApp + email tools immediately — no restart. Sources merge in this
+priority: contacts.json > contacts.vcf (Google export).
+
+## WhatsApp Messaging
+
+Send messages from your own WhatsApp account via WhatsApp Web (pywhatkit).
+
+Setup (once):
+1. Log into `web.whatsapp.com` in your default browser (scan QR, stay signed in).
+2. Give Mike contacts — say `save number ... as ...` lines (above), drop a
+   Google Contacts vCard export at `config/contacts.vcf`, or hand-write
+   `config/contacts.json`.
+
+Usage:
+
+    send message to rahul saying on my way           # verbatim
+    whatsapp mom calling you in five minutes          # verbatim
+    send hi to rhit                                   # typo? Mike confirms:
+                                                      # "Closest contact is
+                                                      # 'rohit' (...). yes/no"
+    whatsapp rahul wishing him happy birthday          # brain composes
+    whatsapp rohit in hinglish good night wishes       # drafted in Hinglish
+    send msg to +919812545678 saying hi                # raw number works too
+
+Rules:
+- `saying ...` = word-for-word. Intent phrasing = brain drafts it and shows
+  exactly what was sent.
+- Typo-tier name matches ask `yes / no` before sending.
+- Brain offline => nothing is sent; Mike reports it in chat instead.
+- `MIKE_WHATSAPP_DRYRUN=1` (config/.env) previews without sending.
+
+## Email Messaging
+
+Gmail via app password (SMTP_SSL :465). Setup once:
+
+    # config/.env
+    MIKE_EMAIL_ADDRESS=you@gmail.com
+    MIKE_EMAIL_APP_PASSWORD=<16-char app password>
+
+(Google Account -> Security -> 2-Step Verification -> App passwords.)
+
+Usage:
+
+    email rahul about project update saying here is the file
+    send mail from me to a@b.com saying quick line          # verbatim body
+    draft an email to rahul apologizing for the delay        # brain writes
+                                                             # SUBJECT+BODY
+    send mail to rohit ... his email address is a@b.com      # address found
+    send him the mail about the offer                        # pronoun reuse
+    email mom in hindi wishing good night                    # Hindi draft
+
+Rules mirror WhatsApp: composed mails always show subject+body after
+sending, sign off as **Rohit** (never placeholders), fail-safe on brain
+errors, `MIKE_EMAIL_DRYRUN=1` previews. If mails land in spam, mark them
+"Not spam" once — Gmail learns fast.
+
+## Multilingual Drafting
+
+Both messengers draft in any language:
+
+- Explicit: append `in hindi`, `in hinglish`, `in tamil`, `in spanish`...
+- Implicit: matches the language of your instruction (Hinglish instruction
+  -> Hinglish message)
+- Default: English.
 
 ## Development Tools (V0.2)
 
