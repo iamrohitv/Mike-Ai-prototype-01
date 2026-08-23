@@ -54,7 +54,10 @@ development environment.
 Workflow: Understand -> Inspect -> Plan -> Execute -> Test -> Verify -> Report.
 
 Status: terminal + git + system + filesystem tools implemented with
-policy-gated approval flow.
+policy-gated approval flow. Now extended with natural-language file
+operations (location ask-flow, spoken type->extension mapping), an
+app/web/folder launcher, open-app tool, safe calculator, and a contacts
+manager feeding messaging tools.
 
 ## V0.3 — Awareness
 
@@ -83,7 +86,10 @@ remote status queries, urgent notifications, client-call handling,
 meeting scheduling.
 
 Status: token-authenticated remote HTTP API (chat, status, briefing,
-sync, history, tools) for phone/remote use.
+sync, history, tools) for phone/remote use — over LAN and worldwide via
+Tailscale. Outbound messaging added: WhatsApp (WhatsApp Web) and Gmail
+sending with brain-composed drafts, multilingual output, contact book
+resolution and fail-safe sending.
 
 ## V0.6 — Distributed Mike
 
