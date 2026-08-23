@@ -3,7 +3,7 @@ import re
 import pywhatkit as kit
 from policies.engine import Level
 from tools.base import Tool
-from tools.computer.contacts import resolve, load_contacts, is_raw_number
+from tools.computer.contacts import load_contacts, resolve_detailed, is_raw_number
 
 
 DRY_RUN = os.environ.get("MIKE_WHATSAPP_DRYRUN", "") == "1"
@@ -18,6 +18,11 @@ INTENT_RE = re.compile(
 )
 PRONOUNS = {"him", "her", "them", "that person", "the person"}
 THIS_MESSAGE = {"this message", "that message", "it", "the message", ""}
+
+YES_RE = re.compile(
+    r"^\s*(yes|ya|yeah|yep|yaas|haan?|ha\s+bhai|sure|ok(?:ay)?|correct|right|"
+    r"do it|send (?:it|him|her)|go ahead|sahi)\b", re.I)
+NO_RE = re.compile(r"^\s*(no|nope|nahi|nah|cancel|stop|don'?t|galat)\b", re.I)
 
 # brain-offline fallback text must NEVER be treated as a drafted message
 BRAIN_FAIL_RE = re.compile(
@@ -36,16 +41,38 @@ class WhatsAppTool(Tool):
         super().__init__(memory, policies)
         policies.allow(self.name, self.level)
         self._last_contact = None
+        self._pending_send = None
 
     def matches(self, request):
+        if self._pending_send is not None:
+            return True
         lowered = request.lower()
         if any(p in lowered for p in ["whatsapp", "send message", "send msg", "text "]):
             return True
-        # scaffold commands like: "draft a message to rohit ... and whatsapp him"
-        return bool(re.search(r"\b(draft|compos|writ)\w*\b.*\bwhatsapp\b|\bwhatsapp\b.*\b(draft|compos|writ)\w*\b", lowered))
+        # generic shapes: 'send hi to rohit', 'draft a msg ... whatsapp him'
+        generic = bool(re.search(r"\bsend\b.{0,60}\bto\b", lowered))
+        scaffold = bool(re.search(
+            r"\b(draft|compos|writ)\w*\b.*\bwhatsapp\b|"
+            r"\bwhatsapp\b.*\b(draft|compos|writ)\w*\b", lowered))
+        return generic or scaffold
 
     def run(self, request):
         lowered = request.lower().strip()
+
+        # pending confirmation from a fuzzy name match ('rhit' -> 'rohit')
+        if self._pending_send is not None:
+            if YES_RE.match(lowered):
+                pend = self._pending_send
+                self._pending_send = None
+                self._last_contact = pend["contact"]
+                return self._send_resolved(
+                    pend["contact"], pend["message"], pend["phone"],
+                    verbatim=pend["verbatim"],
+                )
+            if NO_RE.match(lowered):
+                self._pending_send = None
+                return "Cancelled - nothing was sent."
+            # not a yes/no: fall through and treat as a fresh command
 
         contact, message = self._extract(lowered)
 
@@ -63,13 +90,46 @@ class WhatsAppTool(Tool):
                 "Who should I send this to? I couldn't tell from your message."
             )
 
-        phone = self._resolve_contact(contact)
+        # resolve with typo-awareness: fuzzy hits ask before sending
+        if is_raw_number(contact):
+            phone, fuzzy = contact.strip(), False
+        else:
+            phone, matched_key, fuzzy = resolve_detailed(
+                contact, load_contacts())
+            if not phone and not fuzzy:
+                known = self._find_known_contact(lowered)
+                if known and not self._pending_send:
+                    num, key, fz = resolve_detailed(known, load_contacts())
+                    if num:
+                        contact, phone, fuzzy = known, num, fz
         if not phone:
             return (
                 f"I don't have a number for '{contact}'. Export your contacts "
                 "from contacts.google.com as vCard to config/contacts.vcf "
                 "(or add them to config/contacts.json), then try again."
             )
+
+        verbatim = bool(VERBATIM_RE.search(lowered)) and not INTENT_RE.search(
+            lowered
+        )
+        # short literal content ('send hi to rhit') is word-for-word too -
+        # only prose instructions get drafted by the brain
+        if (not verbatim and message and not INTENT_RE.search(message)
+                and len(message.split()) <= 5):
+            verbatim = True
+
+        if fuzzy and not self._pending_send:
+            self._pending_send = {
+                "contact": matched_key or contact,
+                "phone": phone,
+                "message": message,
+                "verbatim": verbatim,
+            }
+            return (
+                f"Closest contact I know is '{matched_key}' ({phone}). "
+                "Send it there? Say yes / no."
+            )
+
         self._last_contact = contact  # remember for pronoun follow-ups
 
         # --- message fallbacks -------------------------------------------
@@ -100,6 +160,11 @@ class WhatsAppTool(Tool):
         )
         if m:
             return m.group(1).strip(), m.group(2).strip()
+
+        # 'send hi to rohit' / 'send greetings to mom'
+        m = re.search(r"\bsend\s+([^:]*?)\s+to\s+([a-z][a-z ]{1,30}?)(?:\s+on\s+whatsapp|\s*$)", lowered)
+        if m:
+            return m.group(2).strip(), m.group(1).strip()
 
         m = re.search(r"(?:send\s+)(.+?)\s+to\s+(\S.+?)\s+(?:on\s+)?(?:whatsapp|wa)\b", lowered)
         if m:
@@ -148,7 +213,8 @@ class WhatsAppTool(Tool):
         return best
 
     def _resolve_contact(self, contact):
-        return resolve(contact)
+        num, _key, _fuzzy = resolve_detailed(contact)
+        return num
 
     def _conversation_context(self):
         try:

@@ -8,6 +8,7 @@ resolve("rahul") -> "+919876543210" or None.
 Raw numbers ("+91 98765 43210") pass through unchanged.
 """
 
+import difflib
 import json
 import os
 import re
@@ -147,21 +148,37 @@ def _score(query, candidate):
 
 def resolve(name, contacts=None):
     """Fuzzy-resolve a contact name to a phone number, or None."""
+    number, _key, _fuzzy = resolve_detailed(name, contacts)
+    return number
+
+
+def resolve_detailed(name, contacts=None):
+    """Resolve returning (number|None, matched_key|None, fuzzy_bool).
+
+    fuzzy_bool=True means a close-but-not-certain match (typo like
+    'rhit' -> 'rohit'); callers should confirm before sending.
+    """
     text = name.strip()
     if is_raw_number(text):
-        return _normalize_number(text)
+        return _normalize_number(text), None, False
     query = _normalize_name(text)
     if not query:
-        return None
+        return None, None, False
     if contacts is None:
         contacts = load_contacts()
     if not contacts:
-        return None
+        return None, None, False
     if query in contacts:
-        return contacts[query]
+        return contacts[query], query, False
     best_key, best_score = None, 0
     for key in contacts:
         s = _score(query, key)
         if s > best_score:
             best_key, best_score = key, s
-    return contacts.get(best_key)
+    if best_key and best_score >= 90:
+        return contacts[best_key], best_key, False
+    # typo-tier: difflib similarity ('rhit' -> 'rohit sharma' ~ 0.67)
+    close = difflib.get_close_matches(query, list(contacts), n=1, cutoff=0.6)
+    if close:
+        return contacts[close[0]], close[0], True
+    return None, None, False
