@@ -29,6 +29,11 @@ class Mike:
         self.tools = build_tools(self.memory, self.policies)
         self.context = ConversationContext(self.memory)
         self.brain = Brain(self.memory)
+        for tool in self.tools:
+            try:
+                tool.brain = self.brain
+            except Exception:  # noqa: BLE001
+                pass
         self.pending_clear = None
         self.events = EventBus()
         self.briefings = BriefingBuilder(self.memory)
