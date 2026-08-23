@@ -4,6 +4,7 @@ import pywhatkit as kit
 from policies.engine import Level
 from tools.base import Tool
 from tools.computer.contacts import load_contacts, resolve_detailed, is_raw_number
+from tools.computer.compose_lang import extract_language, language_directive
 
 
 DRY_RUN = os.environ.get("MIKE_WHATSAPP_DRYRUN", "") == "1"
@@ -47,6 +48,10 @@ class WhatsAppTool(Tool):
         if self._pending_send is not None:
             return True
         lowered = request.lower()
+        # email commands belong to EmailTool - never hijack them
+        if re.search(r"\be-?mail\b|\bmail\b", lowered) and \
+                "whatsapp" not in lowered:
+            return False
         if any(p in lowered for p in ["whatsapp", "send message", "send msg", "text "]):
             return True
         # generic shapes: 'send hi to rohit', 'draft a msg ... whatsapp him'
@@ -58,6 +63,7 @@ class WhatsAppTool(Tool):
 
     def run(self, request):
         lowered = request.lower().strip()
+        self._lang = extract_language(lowered)
 
         # pending confirmation from a fuzzy name match ('rhit' -> 'rohit')
         if self._pending_send is not None:
@@ -109,6 +115,12 @@ class WhatsAppTool(Tool):
                 "(or add them to config/contacts.json), then try again."
             )
 
+        self._last_contact = contact  # remember for pronoun follow-ups
+
+        # --- message fallbacks -------------------------------------------
+        if message.strip().lower() in THIS_MESSAGE:
+            message = ""  # pure intent - compose from conversation context
+
         verbatim = bool(VERBATIM_RE.search(lowered)) and not INTENT_RE.search(
             lowered
         )
@@ -117,6 +129,9 @@ class WhatsAppTool(Tool):
         if (not verbatim and message and not INTENT_RE.search(message)
                 and len(message.split()) <= 5):
             verbatim = True
+        # explicit '... in hindi' means draft it - literal words can't translate
+        if self._lang:
+            verbatim = False
 
         if fuzzy and not self._pending_send:
             self._pending_send = {
@@ -130,15 +145,6 @@ class WhatsAppTool(Tool):
                 "Send it there? Say yes / no."
             )
 
-        self._last_contact = contact  # remember for pronoun follow-ups
-
-        # --- message fallbacks -------------------------------------------
-        if message.strip().lower() in THIS_MESSAGE:
-            message = ""  # pure intent - compose from conversation context
-
-        verbatim = bool(VERBATIM_RE.search(lowered)) and not INTENT_RE.search(
-            lowered
-        )
         return self._send_resolved(contact, message, phone, verbatim=verbatim)
 
     # ------------------------------------------------------------------ #
@@ -243,7 +249,8 @@ class WhatsAppTool(Tool):
             prompt += f"\nRecent conversation:\n{ctx[:1500]}\n"
         prompt += (
             "Reply with ONLY the message text - no quotes, no explanations, "
-            "no signature, max 3 sentences."
+            "no signature, max 3 sentences. "
+            + language_directive(getattr(self, "_lang", None))
         )
         try:
             drafted = (brain.reason(
@@ -276,6 +283,9 @@ class WhatsAppTool(Tool):
                     "Try again in a bit, or give me the exact words with "
                     "'saying ...' and I'll send those word-for-word."
                 )
+        if not sent_text or not sent_text.strip():
+            return (f"I ended up with an empty message for {contact}, so I "
+                    "did NOT send anything. Tell me what to say.")
 
         if DRY_RUN:
             return (
