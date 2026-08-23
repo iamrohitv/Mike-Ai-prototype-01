@@ -71,6 +71,7 @@ class MikeDesktop(tk.Tk):
         self._wire_tray_notifications()
         self._remote_url = self._start_remote()
         self._wire_phone_updates()
+        self._bridge_ok = self._start_bridge()
 
         self.rec_queue = queue.Queue()
         self.running = threading.Event()
@@ -162,6 +163,11 @@ class MikeDesktop(tk.Tk):
             else:
                 self._append_chat(
                     "state", "phone (anywhere): install Tailscale on PC + phone")
+        if getattr(self, "_bridge_ok", False):
+            self._append_chat(
+                "state", "opencode bridge: ready on :8765 — say 'opencode <task>'")
+        else:
+            self._append_chat("state", "opencode bridge: offline")
         self._update_chat_width()
 
     def _build_dock(self):
@@ -550,6 +556,17 @@ class MikeDesktop(tk.Tk):
             self._tailnet_url = None
             return None
 
+    def _start_bridge(self):
+        """Auto-start the Mike -> opencode bridge on 127.0.0.1:8765."""
+        try:
+            from tools.computer.opencode_bridge import start_background, DEFAULT_PORT
+            server, thread = start_background(port=DEFAULT_PORT)
+            self._bridge_server = server
+            return server is not None
+        except Exception:  # noqa: BLE001
+            self._bridge_server = None
+            return False
+
     # ---------- awareness ----------
     def _start_awareness(self):
         try:
@@ -683,6 +700,11 @@ class MikeDesktop(tk.Tk):
         if getattr(self, "_remote_server", None) is not None:
             try:
                 self._remote_server.shutdown()
+            except Exception:  # noqa: BLE001
+                pass
+        if getattr(self, "_bridge_server", None) is not None:
+            try:
+                self._bridge_server.shutdown()
             except Exception:  # noqa: BLE001
                 pass
         try:
