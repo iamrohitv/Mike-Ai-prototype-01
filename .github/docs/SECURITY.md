@@ -10,6 +10,8 @@ Security is foundational.
 - Private credentials
 - Private certificates
 - Personal secrets
+- Personal contact data (`config/contacts.json`, `config/contacts.vcf`
+  are gitignored)
 
 ## Use
 
