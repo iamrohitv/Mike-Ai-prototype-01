@@ -123,6 +123,44 @@ def load_contacts():
     return contacts
 
 
+def _normalize_value(value):
+    """Return ('phone'|'email', normalized) or (None, None) if invalid."""
+    value = str(value).strip()
+    if "@" in value:
+        if "." not in value.split("@")[-1]:
+            return None, None
+        return "email", value.lower()
+    digits = re.sub(r"[^\d+]", "", value)
+    core = re.sub(r"\D", "", digits)
+    if not 7 <= len(core) <= 15:
+        return None, None
+    if len(core) == 10 and not digits.startswith("+"):
+        digits = "+91" + core          # assume India for bare numbers
+    return "phone", digits
+
+
+def save_contact(name, value):
+    """Upsert into config/contacts.json. Returns (kind, stored_value)."""
+    kind, stored = _normalize_value(value)
+    if kind is None:
+        return None, None
+    path = _json_path()
+    book = {}
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            loaded = json.load(f)
+        if isinstance(loaded, dict):
+            book = loaded
+    except (OSError, ValueError):
+        pass
+    book[_normalize_name(name)] = stored
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(book, f, indent=2, ensure_ascii=False)
+    os.replace(tmp, path)
+    return kind, stored
+
+
 def is_raw_number(text):
     return bool(_PHONE_RE.match(text.strip()))
 
