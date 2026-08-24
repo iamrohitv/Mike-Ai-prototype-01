@@ -376,6 +376,7 @@ class Mike:
             "  launch      - 'open <file> in vscode', 'open https://... in chrome', 'open folder <path>'",
             "  whatsapp    - 'send message to <contact> saying <msg>', 'whatsapp <contact> <msg>'",
             "  contacts    - 'save number 9876543210 as mom', 'add email a@b.com as boss', 'show contacts'",
+            "  messages    - 'read my new messages' (gmail unread + whatsapp unreads)",
             "  email       - 'email <who> about <subject> saying <msg>' (gmail app password)",
             "  opencode    - 'opencode <task>' sends coding task to opencode",
             "  project     - 'check the project'",
