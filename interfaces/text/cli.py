@@ -1,5 +1,7 @@
 import re
 import sys
+import threading
+import time
 
 try:
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -18,6 +20,7 @@ from security.paths import db_path
 from security.env import ensure_env_template
 from events.bus import EventBus
 from awareness.briefing import BriefingBuilder
+from tools.computer.message_providers import fetch_unread_emails, fetch_whatsapp_unreads
 
 
 class Mike:
@@ -94,6 +97,89 @@ class Mike:
             for m in recent_mem:
                 parts.append(f"  - {m['content']}")
         return "\n".join(parts)
+
+    def check_unread_startup(self):
+        """Auto-check unread messages at startup.
+
+        Gives ONLY counts and sender/contact names - no categories,
+        no subjects, no previews. Runs in background thread.
+        """
+        # --- Gmail: (sender, "subject [date]") -> sender + total count ---
+        try:
+            email_result = fetch_unread_emails(limit=10)
+            ok = email_result.get("ok")
+            email_items = email_result.get("items", []) if ok else []
+            email_note = email_result.get("note", "") if not ok else ""
+        except Exception:
+            email_items, email_note = [], "gmail error"
+
+        mail_names = [name for name, _detail in email_items]
+        mail_total = len(mail_names)
+
+        # --- WhatsApp: (contact, "N new | preview") -> contact + msg count ---
+        try:
+            wa_result = fetch_whatsapp_unreads(wait_seconds=45)
+            ok = wa_result.get("ok")
+            wa_items = wa_result.get("items", []) if ok else []
+            wa_note = wa_result.get("note", "") if not ok else ""
+        except Exception:
+            wa_items, wa_note = [], "whatsapp error"
+
+        wa_counts = []  # (name, n_new)
+        for name, detail in wa_items:
+            digits = "".join(ch for ch in detail.split("|")[0] if ch.isdigit())
+            wa_counts.append((name, int(digits) if digits else 1))
+        wa_total = sum(count for _name, count in wa_counts)
+
+        # --- Build compact summary: numbers + names only ---
+        lines = []
+        if mail_total:
+            lines.append(
+                f"Gmail: {mail_total} unread from "
+                + ", ".join(mail_names[:5])
+                + ("..." if len(mail_names) > 5 else "")
+            )
+        elif email_note:
+            lines.append(f"Gmail: unavailable ({email_note})")
+
+        if wa_counts:
+            wa_part = ", ".join(f"{n} ({c})" for n, c in wa_counts[:5])
+            more = "..." if len(wa_counts) > 5 else ""
+            lines.append(f"WhatsApp: {wa_total} new from {wa_part}{more}")
+        elif wa_note:
+            lines.append(f"WhatsApp: unavailable ({wa_note})")
+        else:
+            lines.append("WhatsApp: 0 unread")
+
+        summary = "\n".join(lines) if lines else "No unread messages anywhere."
+
+        # Spoken form: short, numbers + names only
+        spoken_parts = []
+        if mail_total:
+            spoken_parts.append(
+                f"{mail_total} unread mail"
+                + ("s" if mail_total != 1 else "")
+                + " from " + ", ".join(mail_names[:3])
+                + (" and others" if len(mail_names) > 3 else "")
+            )
+        if wa_total:
+            wa_names = [n for n, _c in wa_counts[:3]]
+            spoken_parts.append(
+                f"{wa_total} new whatsapp message"
+                + ("s" if wa_total != 1 else "")
+                + " from " + ", ".join(wa_names)
+                + (" and others" if len(wa_counts) > 3 else "")
+            )
+        spoken = (
+            "You have " + "; ".join(spoken_parts) + "."
+            if spoken_parts else
+            "You have no unread messages."
+        )
+
+        print(f"\nmike: {summary}")
+        self._startup_spoken = spoken  # desktop app reads this to speak it
+        self.logger.info("STARTUP MESSAGES: %s", spoken.replace("\n", " "))
+        return summary
 
     def _handle_approval(self, text):
         lowered = text.strip().lower()
@@ -496,7 +582,6 @@ class Mike:
         self.logger.info("MIKE: %s", answer)
         return answer
 
-
 def main():
     mike = Mike()
     print("Mike is here. What would you like to discuss? (type 'exit' to leave)")
@@ -505,6 +590,10 @@ def main():
         print("\nHere's where things stand:")
         print(briefing)
         print()
+
+    # --- Startup unread messages check (background, always on) ---
+    threading.Thread(target=mike.check_unread_startup, daemon=True).start()
+
     while True:
         try:
             line = input("you > ")

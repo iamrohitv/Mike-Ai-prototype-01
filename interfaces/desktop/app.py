@@ -775,6 +775,21 @@ class MikeDesktop(tk.Tk):
         )
 
     # ---------- voice ----------
+    def _startup_messages_check(self):
+        """Auto-check unread mail/whatsapp after greeting; show + speak."""
+        try:
+            summary = self.mike.check_unread_startup()
+        except Exception:  # noqa: BLE001
+            return
+        if not summary or summary.startswith("No unread"):
+            return
+        self.after(0, lambda s=summary: self._append_chat("mike", s))
+        spoken = getattr(self.mike, "_startup_spoken", None)
+        if spoken and spoken != "You have no unread messages.":
+            threading.Thread(
+                target=self._speak_async, args=(spoken,), daemon=True
+            ).start()
+
     def _start_voice(self):
         self._set_state("listening")
         threading.Thread(target=self._voice_loop, daemon=True).start()
@@ -794,7 +809,9 @@ class MikeDesktop(tk.Tk):
             self.after(0, lambda: self._set_state("speaking"))
             self._speak_and_wait(greeting)
             self.after(0, lambda: self._set_state("listening"))
-            while self.running.is_set():
+        # --- Startup unread messages check (own thread, always on) ---
+        threading.Thread(target=self._startup_messages_check, daemon=True).start()
+        while self.running.is_set():
                 try:
                     audio = recognizer.listen(source, timeout=3, phrase_time_limit=30)
                 except sr.WaitTimeoutError:
