@@ -12,3 +12,6 @@ config/contacts.vcf
 
 # runtime artifacts
 PyWhatKit_DB.txt
+
+# whatsapp browser session (private, never commit)
+config/wa_profile/
