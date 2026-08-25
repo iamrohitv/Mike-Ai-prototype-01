@@ -19,6 +19,25 @@ WA_PROFILE_DIR = Path(get_config_path()) / "wa_profile"
 WA_URL = "https://web.whatsapp.com"
 
 
+def _real_edge_user_data():
+    """Path to the real Microsoft Edge 'User Data' dir, or None."""
+    local = os.environ.get("LOCALAPPDATA")
+    if not local:
+        return None
+    p = Path(local) / "Microsoft" / "Edge" / "User Data"
+    return p if p.is_dir() else None
+
+
+def _use_real_edge_profile():
+    """True when Rohit wants Mike on his actual Edge login."""
+    return os.environ.get("MIKE_WA_USE_REAL_EDGE", "").strip() == "1"
+
+
+def _edge_profile_dir():
+    """Which Edge profile holds WhatsApp ('Default', 'Profile 1', ...)."""
+    return os.environ.get("MIKE_WA_EDGE_PROFILE", "").strip() or "Default"
+
+
 # --------------------------------------------------------------------- #
 # Gmail
 # --------------------------------------------------------------------- #
@@ -78,7 +97,7 @@ _BADGE_SELECTORS = [
     "span[aria-label]",
     "[data-testid='icon-unread-count']",
 ]
-_ROW_SELECTOR = "#pane-side div[role='row'], #pane-side div[aria-label*='Chat list'] div"
+_ROW_SELECTOR = "#pane-side div[role='row'], #pane-side div[aria-label*='Chat list'] def"
 
 
 def _digits(text):
@@ -126,23 +145,98 @@ def parse_chat_rows(rows):
 
 
 def fetch_whatsapp_unreads(wait_seconds=25):
+    """Fetch unread WhatsApp Web messages.
+
+    Tries Microsoft Edge first; falls back to Chrome if Edge is not available.
+    Uses a dedicated browser profile directory at ``config/wa_profile`` so
+    the user only needs to scan the QR code once.
+    """
     try:
         from selenium import webdriver
-        from selenium.webdriver.chrome.options import Options
     except ImportError:
         return {"ok": False, "items": [],
                 "note": "selenium missing - pip install selenium"}
 
-    WA_PROFILE_DIR.mkdir(parents=True, exist_ok=True)
-    opts = Options()
-    opts.add_argument(f"--user-data-dir={WA_PROFILE_DIR}")
-    opts.add_argument("--profile-directory=Default")
-    opts.add_argument("--log-level=3")
-    opts.add_argument("--no-first-run")
-    opts.add_argument("--disable-notifications")
+    # ---- pick a browser ----------------------------------------------------
+    edge_options = None
+    chrome_options = None
+    using_real_edge = _use_real_edge_profile() and _real_edge_user_data()
+
+    if using_real_edge:
+        user_data = str(_real_edge_user_data())
+        profile_dir = _edge_profile_dir()
+    else:
+        WA_PROFILE_DIR.mkdir(parents=True, exist_ok=True)
+        user_data = str(WA_PROFILE_DIR)
+        profile_dir = "Default"
+
+    # 1) Try Edge
+    try:
+        from selenium.webdriver.edge.options import Options as EdgeOptions
+        edge_options = EdgeOptions()
+        edge_options.add_argument(f"--user-data-dir={user_data}")
+        edge_options.add_argument(f"--profile-directory={profile_dir}")
+        edge_options.add_argument("--log-level=3")
+        edge_options.add_argument("--no-first-run")
+        edge_options.add_argument("--disable-notifications")
+    except Exception:  # noqa: BLE001
+        edge_options = None
+
+    # 2) Try Chrome (dedicated profile only - never touch real Chrome data)
+    try:
+        from selenium.webdriver.chrome.options import Options as ChromeOptions
+        chrome_options = ChromeOptions()
+        chrome_options.add_argument(f"--user-data-dir={user_data}")
+        chrome_options.add_argument("--profile-directory=Default")
+        chrome_options.add_argument("--log-level=3")
+        chrome_options.add_argument("--no-first-run")
+        chrome_options.add_argument("--disable-notifications")
+    except Exception:  # noqa: BLE001
+        chrome_options = None
+
+    # 3) Fallback order: Edge > Chrome
+    selected_options = edge_options or chrome_options
+    if not selected_options:
+        return {"ok": False, "items": [],
+                "note": "no supported browser (edge/chrome) selenium options found"}
+
+    # ---- launch the browser ------------------------------------------------
     driver = None
     try:
-        driver = webdriver.Chrome(options=opts)
+        if edge_options is not None:
+            from selenium.webdriver.edge.service import Service as EdgeService
+            # Try common edge driver locations
+            edge_driver_path = None
+            for candidate in [
+                r"C:\Program Files (x86)\Microsoft\Edge\Application\msedgedriver.exe",
+                r"C:\Program Files\Microsoft\Edge\Application\msedgedriver.exe",
+                None,  # let selenium find it on PATH
+            ]:
+                if candidate and os.path.exists(candidate):
+                    edge_driver_path = candidate
+                    break
+            if edge_driver_path:
+                driver = webdriver.Edge(service=EdgeService(edge_driver_path),
+                                        options=edge_options)
+            else:
+                driver = webdriver.Edge(options=edge_options)
+        else:
+            from selenium.webdriver.chrome.service import Service as ChromeService
+            chrome_driver_path = None
+            for candidate in [
+                r"C:\Program Files (x86)\Google\Chrome\Application\chromedriver.exe",
+                r"C:\Program Files\Google\Chrome\Application\chromedriver.exe",
+                None,
+            ]:
+                if candidate and os.path.exists(candidate):
+                    chrome_driver_path = candidate
+                    break
+            if chrome_driver_path:
+                driver = webdriver.Chrome(service=ChromeService(chrome_driver_path),
+                                          options=chrome_options)
+            else:
+                driver = webdriver.Chrome(options=chrome_options)
+
         driver.set_window_size(1200, 900)
         driver.get(WA_URL)
 
@@ -165,15 +259,64 @@ def fetch_whatsapp_unreads(wait_seconds=25):
                  for n, c, p in chats],
                 "note": note}
     except Exception as exc:  # noqa: BLE001
-        msg = str(exc).splitlines()[0][:90] if str(exc) else "unknown"
-        qr_hint = ("first time? a Chrome window is asking you to scan the QR "
-                   "with your phone - do it once, then retry"
-                   if "TimeoutException" in type(exc).__name__ or
-                   "timeout" in msg.lower() else msg)
-        return {"ok": False, "items": [], "note": f"whatsapp: {qr_hint}"}
+        raw = str(exc)
+        msgt = raw.splitlines()[0][:90] if raw else "unknown"
+        lowered = (raw + type(exc).__name__).lower()
+        if "user data directory is already in use" in lowered or \
+                "devtoolsactiveport" in lowered or "only one instance" in lowered:
+            note = ("whatsapp: Microsoft Edge is open right now - close all "
+                    "Edge windows and ask again")
+        elif "timeout" in lowered:
+            if using_real_edge:
+                note = ("whatsapp: the selected Edge profile ('"
+                        + _edge_profile_dir() + "') isn't logged into "
+                        "WhatsApp - set MIKE_WA_EDGE_PROFILE to the other "
+                        "profile in config/.env, or open WhatsApp once there")
+            else:
+                note = ("first time? a browser is asking you to scan the QR "
+                        "with your phone - do it once, then retry")
+        else:
+            note = msgt
+        return {"ok": False, "items": [], "note": f"whatsapp: {note}"}
     finally:
         try:
             if driver:
                 driver.quit()
         except Exception:  # noqa: BLE001
             pass
+
+
+def list_edge_profiles():
+    """Return [(profile_dir_name, account_name)] from Edge's Local State."""
+    base = _real_edge_user_data()
+    if not base:
+        return []
+    try:
+        import json
+        with open(base / "Local State", "r", encoding="utf-8") as f:
+            state = json.load(f)
+        cache = state.get("profile", {}).get("info_cache", {})
+        out = []
+        for dirname, info in cache.items():
+            name = (info.get("name") or info.get("user_name")
+                    or dirname).strip()
+            email = (info.get("user_name") or "").strip()
+            label = f"{name} <{email}>" if email else name
+            out.append((dirname, label))
+        return out
+    except Exception:  # noqa: BLE001
+        return []
+
+
+if __name__ == "__main__":
+    print("Edge profiles found:")
+    found = list_edge_profiles()
+    if not found:
+        print("  (none - or Edge not installed at the default location)")
+    for dirname, label in found:
+        marker = ("  <- current MIKE_WA_EDGE_PROFILE"
+                  if dirname == _edge_profile_dir() else "")
+        print(f"  {dirname}: {label}{marker}")
+    print("\nTo use your real logged-in WhatsApp profile, set in config/.env:")
+    print("  MIKE_WA_USE_REAL_EDGE=1")
+    print("  MIKE_WA_EDGE_PROFILE=<dir name from above>")
